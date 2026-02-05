@@ -16,7 +16,7 @@
     }
   },
   "scripts": {
-    "generate": "bun run scripts/generate.ts",
+    "generate": "bun run scripts/generate.ts && bun run scripts/generate-methods.ts",
     "build": "bun run generate && tsc",
     "typecheck": "tsc --noEmit",
     "test": "bun run examples/mainnet.ts"
@@ -26,7 +26,7 @@
   },
   "devDependencies": {
     "@types/node": "^25.2.0",
-    "json-schema-to-zod": "^2.7.0",
+    "openapi-zod-client": "^1.18.0",
     "typescript": "^5.8.0"
   },
   "files": [

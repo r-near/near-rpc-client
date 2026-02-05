@@ -209,6 +209,44 @@ pub struct AccessKeyList {
 ///      "description": "Grants full access to the account.\nNOTE: It's used to replace account-level public keys.",
 ///      "type": "string",
 ///      "const": "FullAccess"
+///    },
+///    {
+///      "title": "GasKeyFunctionCall",
+///      "description": "Gas key with limited permission to make transactions with FunctionCallActions\nGas keys are a kind of access keys with a prepaid balance to pay for gas.",
+///      "type": "object",
+///      "required": [
+///        "GasKeyFunctionCall"
+///      ],
+///      "properties": {
+///        "GasKeyFunctionCall": {
+///          "type": "array",
+///          "items": [
+///            {
+///              "$ref": "#/definitions/GasKeyInfo"
+///            },
+///            {
+///              "$ref": "#/definitions/FunctionCallPermission"
+///            }
+///          ],
+///          "maxItems": 2,
+///          "minItems": 2
+///        }
+///      },
+///      "additionalProperties": false
+///    },
+///    {
+///      "title": "GasKeyFullAccess",
+///      "description": "Gas key with full access to the account.\nGas keys are a kind of access keys with a prepaid balance to pay for gas.",
+///      "type": "object",
+///      "required": [
+///        "GasKeyFullAccess"
+///      ],
+///      "properties": {
+///        "GasKeyFullAccess": {
+///          "$ref": "#/definitions/GasKeyInfo"
+///        }
+///      },
+///      "additionalProperties": false
 ///    }
 ///  ]
 ///}
@@ -220,10 +258,26 @@ pub enum AccessKeyPermission {
     /**Grants full access to the account.
 NOTE: It's used to replace account-level public keys.*/
     FullAccess,
+    /**Gas key with limited permission to make transactions with FunctionCallActions
+Gas keys are a kind of access keys with a prepaid balance to pay for gas.*/
+    GasKeyFunctionCall(GasKeyInfo, FunctionCallPermission),
+    /**Gas key with full access to the account.
+Gas keys are a kind of access keys with a prepaid balance to pay for gas.*/
+    GasKeyFullAccess(GasKeyInfo),
 }
 impl ::std::convert::From<FunctionCallPermission> for AccessKeyPermission {
     fn from(value: FunctionCallPermission) -> Self {
         Self::FunctionCall(value)
+    }
+}
+impl ::std::convert::From<(GasKeyInfo, FunctionCallPermission)> for AccessKeyPermission {
+    fn from(value: (GasKeyInfo, FunctionCallPermission)) -> Self {
+        Self::GasKeyFunctionCall(value.0, value.1)
+    }
+}
+impl ::std::convert::From<GasKeyInfo> for AccessKeyPermission {
+    fn from(value: GasKeyInfo) -> Self {
+        Self::GasKeyFullAccess(value)
     }
 }
 ///Describes the permission scope for an access key. Whether it is a function call or a full access key.
@@ -278,6 +332,83 @@ impl ::std::convert::From<FunctionCallPermission> for AccessKeyPermission {
 ///        }
 ///      },
 ///      "additionalProperties": false
+///    },
+///    {
+///      "title": "GasKeyFunctionCall",
+///      "type": "object",
+///      "required": [
+///        "GasKeyFunctionCall"
+///      ],
+///      "properties": {
+///        "GasKeyFunctionCall": {
+///          "type": "object",
+///          "required": [
+///            "balance",
+///            "method_names",
+///            "num_nonces",
+///            "receiver_id"
+///          ],
+///          "properties": {
+///            "allowance": {
+///              "oneOf": [
+///                {
+///                  "$ref": "#/definitions/NearToken"
+///                },
+///                {
+///                  "type": "null"
+///                }
+///              ]
+///            },
+///            "balance": {
+///              "$ref": "#/definitions/NearToken"
+///            },
+///            "method_names": {
+///              "type": "array",
+///              "items": {
+///                "type": "string"
+///              }
+///            },
+///            "num_nonces": {
+///              "type": "integer",
+///              "format": "uint16",
+///              "maximum": 65535.0,
+///              "minimum": 0.0
+///            },
+///            "receiver_id": {
+///              "type": "string"
+///            }
+///          }
+///        }
+///      },
+///      "additionalProperties": false
+///    },
+///    {
+///      "title": "GasKeyFullAccess",
+///      "type": "object",
+///      "required": [
+///        "GasKeyFullAccess"
+///      ],
+///      "properties": {
+///        "GasKeyFullAccess": {
+///          "type": "object",
+///          "required": [
+///            "balance",
+///            "num_nonces"
+///          ],
+///          "properties": {
+///            "balance": {
+///              "$ref": "#/definitions/NearToken"
+///            },
+///            "num_nonces": {
+///              "type": "integer",
+///              "format": "uint16",
+///              "maximum": 65535.0,
+///              "minimum": 0.0
+///            }
+///          }
+///        }
+///      },
+///      "additionalProperties": false
 ///    }
 ///  ]
 ///}
@@ -292,6 +423,15 @@ pub enum AccessKeyPermissionView {
         method_names: ::std::vec::Vec<::std::string::String>,
         receiver_id: ::std::string::String,
     },
+    GasKeyFunctionCall {
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        allowance: ::std::option::Option<NearToken>,
+        balance: NearToken,
+        method_names: ::std::vec::Vec<::std::string::String>,
+        num_nonces: u16,
+        receiver_id: ::std::string::String,
+    },
+    GasKeyFullAccess { balance: NearToken, num_nonces: u16 },
 }
 ///Describes access key permission scope and nonce.
 ///
@@ -1414,6 +1554,66 @@ Action index is not defined if ActionError.kind is `ActionErrorKind::LackBalance
 ///        }
 ///      },
 ///      "additionalProperties": false
+///    },
+///    {
+///      "title": "GasKeyDoesNotExist",
+///      "description": "Gas key does not exist for the specified public key",
+///      "type": "object",
+///      "required": [
+///        "GasKeyDoesNotExist"
+///      ],
+///      "properties": {
+///        "GasKeyDoesNotExist": {
+///          "type": "object",
+///          "required": [
+///            "account_id",
+///            "public_key"
+///          ],
+///          "properties": {
+///            "account_id": {
+///              "$ref": "#/definitions/AccountId"
+///            },
+///            "public_key": {
+///              "$ref": "#/definitions/PublicKey"
+///            }
+///          }
+///        }
+///      },
+///      "additionalProperties": false
+///    },
+///    {
+///      "title": "InsufficientGasKeyBalance",
+///      "description": "Gas key does not have sufficient balance for the requested withdrawal",
+///      "type": "object",
+///      "required": [
+///        "InsufficientGasKeyBalance"
+///      ],
+///      "properties": {
+///        "InsufficientGasKeyBalance": {
+///          "type": "object",
+///          "required": [
+///            "account_id",
+///            "balance",
+///            "public_key",
+///            "required"
+///          ],
+///          "properties": {
+///            "account_id": {
+///              "$ref": "#/definitions/AccountId"
+///            },
+///            "balance": {
+///              "$ref": "#/definitions/NearToken"
+///            },
+///            "public_key": {
+///              "$ref": "#/definitions/PublicKey"
+///            },
+///            "required": {
+///              "$ref": "#/definitions/NearToken"
+///            }
+///          }
+///        }
+///      },
+///      "additionalProperties": false
 ///    }
 ///  ]
 ///}
@@ -1493,6 +1693,15 @@ TODO(#8598): This error is named very poorly. A better name would be
     ///DelegateAction nonce is larger than the upper bound given by the block height
     DelegateActionNonceTooLarge { delegate_nonce: u64, upper_bound: u64 },
     GlobalContractDoesNotExist { identifier: GlobalContractIdentifier },
+    ///Gas key does not exist for the specified public key
+    GasKeyDoesNotExist { account_id: AccountId, public_key: PublicKey },
+    ///Gas key does not have sufficient balance for the requested withdrawal
+    InsufficientGasKeyBalance {
+        account_id: AccountId,
+        balance: NearToken,
+        public_key: PublicKey,
+        required: NearToken,
+    },
 }
 impl ::std::convert::From<FunctionCallError> for ActionErrorKind {
     fn from(value: FunctionCallError) -> Self {
@@ -1833,6 +2042,56 @@ impl ::std::convert::From<InvalidAccessKeyError> for ActionErrorKind {
 ///        }
 ///      },
 ///      "additionalProperties": false
+///    },
+///    {
+///      "title": "TransferToGasKey",
+///      "type": "object",
+///      "required": [
+///        "TransferToGasKey"
+///      ],
+///      "properties": {
+///        "TransferToGasKey": {
+///          "type": "object",
+///          "required": [
+///            "deposit",
+///            "public_key"
+///          ],
+///          "properties": {
+///            "deposit": {
+///              "$ref": "#/definitions/NearToken"
+///            },
+///            "public_key": {
+///              "$ref": "#/definitions/PublicKey"
+///            }
+///          }
+///        }
+///      },
+///      "additionalProperties": false
+///    },
+///    {
+///      "title": "WithdrawFromGasKey",
+///      "type": "object",
+///      "required": [
+///        "WithdrawFromGasKey"
+///      ],
+///      "properties": {
+///        "WithdrawFromGasKey": {
+///          "type": "object",
+///          "required": [
+///            "amount",
+///            "public_key"
+///          ],
+///          "properties": {
+///            "amount": {
+///              "$ref": "#/definitions/NearToken"
+///            },
+///            "public_key": {
+///              "$ref": "#/definitions/PublicKey"
+///            }
+///          }
+///        }
+///      },
+///      "additionalProperties": false
 ///    }
 ///  ]
 ///}
@@ -1863,6 +2122,8 @@ pub enum ActionView {
         data: ::std::collections::HashMap<::std::string::String, ::std::string::String>,
         deposit: NearToken,
     },
+    TransferToGasKey { deposit: NearToken, public_key: PublicKey },
+    WithdrawFromGasKey { amount: NearToken, public_key: PublicKey },
 }
 ///Describes the error for validating a list of actions.
 ///
@@ -2253,6 +2514,63 @@ pub enum ActionView {
 ///        }
 ///      },
 ///      "additionalProperties": false
+///    },
+///    {
+///      "title": "GasKeyInvalidNumNonces",
+///      "type": "object",
+///      "required": [
+///        "GasKeyInvalidNumNonces"
+///      ],
+///      "properties": {
+///        "GasKeyInvalidNumNonces": {
+///          "type": "object",
+///          "required": [
+///            "limit",
+///            "requested_nonces"
+///          ],
+///          "properties": {
+///            "limit": {
+///              "type": "integer",
+///              "format": "uint16",
+///              "maximum": 65535.0,
+///              "minimum": 0.0
+///            },
+///            "requested_nonces": {
+///              "type": "integer",
+///              "format": "uint16",
+///              "maximum": 65535.0,
+///              "minimum": 0.0
+///            }
+///          }
+///        }
+///      },
+///      "additionalProperties": false
+///    },
+///    {
+///      "title": "AddGasKeyWithNonZeroBalance",
+///      "type": "object",
+///      "required": [
+///        "AddGasKeyWithNonZeroBalance"
+///      ],
+///      "properties": {
+///        "AddGasKeyWithNonZeroBalance": {
+///          "type": "object",
+///          "required": [
+///            "balance"
+///          ],
+///          "properties": {
+///            "balance": {
+///              "$ref": "#/definitions/NearToken"
+///            }
+///          }
+///        }
+///      },
+///      "additionalProperties": false
+///    },
+///    {
+///      "description": "Gas keys with FunctionCall permission cannot have an allowance set.",
+///      "type": "string",
+///      "const": "GasKeyFunctionCallAllowanceNotAllowed"
 ///    }
 ///  ]
 ///}
@@ -2299,6 +2617,10 @@ that type into observable borsh serialization.*/
     },
     DeterministicStateInitKeyLengthExceeded { length: u64, limit: u64 },
     DeterministicStateInitValueLengthExceeded { length: u64, limit: u64 },
+    GasKeyInvalidNumNonces { limit: u16, requested_nonces: u16 },
+    AddGasKeyWithNonZeroBalance { balance: NearToken },
+    ///Gas keys with FunctionCall permission cannot have an allowance set.
+    GasKeyFunctionCallAllowanceNotAllowed,
 }
 ///An action that adds key with public key associated
 ///
@@ -2765,6 +3087,22 @@ pub struct BlockHeaderInnerLiteView {
 ///        }
 ///      ]
 ///    },
+///    "shard_split": {
+///      "type": [
+///        "array",
+///        "null"
+///      ],
+///      "items": [
+///        {
+///          "$ref": "#/definitions/ShardId"
+///        },
+///        {
+///          "$ref": "#/definitions/AccountId"
+///        }
+///      ],
+///      "maxItems": 2,
+///      "minItems": 2
+///    },
 ///    "signature": {
 ///      "description": "Signature of the block producer.",
 ///      "allOf": [
@@ -2842,6 +3180,8 @@ pub struct BlockHeaderView {
     ///TODO(2271): deprecated.
     #[serde(default = "defaults::block_header_view_rent_paid")]
     pub rent_paid: NearToken,
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub shard_split: ::std::option::Option<(ShardId, AccountId)>,
     ///Signature of the block producer.
     pub signature: Signature,
     ///Legacy json number. Should not be used.
@@ -2961,6 +3301,78 @@ impl ::std::convert::From<u64> for BlockId {
 impl ::std::convert::From<CryptoHash> for BlockId {
     fn from(value: CryptoHash) -> Self {
         Self::CryptoHash(value)
+    }
+}
+///`BlockReference`
+///
+/// <details><summary>JSON schema</summary>
+///
+/// ```json
+///{
+///  "title": "BlockReference",
+///  "oneOf": [
+///    {
+///      "title": "BlockId",
+///      "type": "object",
+///      "required": [
+///        "block_id"
+///      ],
+///      "properties": {
+///        "block_id": {
+///          "$ref": "#/definitions/BlockId"
+///        }
+///      }
+///    },
+///    {
+///      "title": "Finality",
+///      "type": "object",
+///      "required": [
+///        "finality"
+///      ],
+///      "properties": {
+///        "finality": {
+///          "$ref": "#/definitions/Finality"
+///        }
+///      }
+///    },
+///    {
+///      "title": "SyncCheckpoint",
+///      "type": "object",
+///      "required": [
+///        "sync_checkpoint"
+///      ],
+///      "properties": {
+///        "sync_checkpoint": {
+///          "$ref": "#/definitions/SyncCheckpoint"
+///        }
+///      }
+///    }
+///  ]
+///}
+/// ```
+/// </details>
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug)]
+pub enum BlockReference {
+    #[serde(rename = "block_id")]
+    BlockId(BlockId),
+    #[serde(rename = "finality")]
+    Finality(Finality),
+    #[serde(rename = "sync_checkpoint")]
+    SyncCheckpoint(SyncCheckpoint),
+}
+impl ::std::convert::From<BlockId> for BlockReference {
+    fn from(value: BlockId) -> Self {
+        Self::BlockId(value)
+    }
+}
+impl ::std::convert::From<Finality> for BlockReference {
+    fn from(value: Finality) -> Self {
+        Self::Finality(value)
+    }
+}
+impl ::std::convert::From<SyncCheckpoint> for BlockReference {
+    fn from(value: SyncCheckpoint) -> Self {
+        Self::SyncCheckpoint(value)
     }
 }
 ///Height and hash of a block
@@ -4698,21 +5110,11 @@ impl ::std::fmt::Display for EpochId {
 ///    "timeout_for_epoch_sync"
 ///  ],
 ///  "properties": {
-///    "disable_epoch_sync_for_bootstrapping": {
-///      "description": "If true, even if the node started from genesis, it will not perform epoch sync.\nThere should be no reason to set this flag in production, because on both mainnet\nand testnet it would be infeasible to catch up from genesis without epoch sync.",
-///      "default": false,
-///      "type": "boolean"
-///    },
 ///    "epoch_sync_horizon": {
 ///      "description": "This serves as two purposes: (1) the node will not epoch sync and instead resort to\nheader sync, if the genesis block is within this many blocks from the current block;\n(2) the node will reject an epoch sync proof if the provided proof is for an epoch\nthat is more than this many blocks behind the current block.",
 ///      "type": "integer",
 ///      "format": "uint64",
 ///      "minimum": 0.0
-///    },
-///    "ignore_epoch_sync_network_requests": {
-///      "description": "If true, the node will ignore epoch sync requests from the network. It is strongly\nrecommended not to set this flag, because it will prevent other nodes from\nbootstrapping. This flag is only included as a kill-switch and may be removed in a\nfuture release. Please note that epoch sync requests are heavily rate limited and\ncached, and therefore should not affect the performance of the node or introduce\nany non-negligible increase in network traffic.",
-///      "default": false,
-///      "type": "boolean"
 ///    },
 ///    "timeout_for_epoch_sync": {
 ///      "description": "Timeout for epoch sync requests. The node will continue retrying indefinitely even\nif this timeout is exceeded.",
@@ -4728,24 +5130,11 @@ impl ::std::fmt::Display for EpochId {
 /// </details>
 #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug)]
 pub struct EpochSyncConfig {
-    /**If true, even if the node started from genesis, it will not perform epoch sync.
-There should be no reason to set this flag in production, because on both mainnet
-and testnet it would be infeasible to catch up from genesis without epoch sync.*/
-    #[serde(default)]
-    pub disable_epoch_sync_for_bootstrapping: bool,
     /**This serves as two purposes: (1) the node will not epoch sync and instead resort to
 header sync, if the genesis block is within this many blocks from the current block;
 (2) the node will reject an epoch sync proof if the provided proof is for an epoch
 that is more than this many blocks behind the current block.*/
     pub epoch_sync_horizon: u64,
-    /**If true, the node will ignore epoch sync requests from the network. It is strongly
-recommended not to set this flag, because it will prevent other nodes from
-bootstrapping. This flag is only included as a kill-switch and may be removed in a
-future release. Please note that epoch sync requests are heavily rate limited and
-cached, and therefore should not affect the performance of the node or introduce
-any non-negligible increase in network traffic.*/
-    #[serde(default)]
-    pub ignore_epoch_sync_network_requests: bool,
     /**Timeout for epoch sync requests. The node will continue retrying indefinitely even
 if this timeout is exceeded.*/
     pub timeout_for_epoch_sync: DurationAsStdSchemaProvider,
@@ -6688,18 +7077,17 @@ Empty list means any method name can be used.*/
     ///The access key only allows transactions with the given receiver's account id.
     pub receiver_id: ::std::string::String,
 }
-///`GasKeyView`
+///`GasKeyInfo`
 ///
 /// <details><summary>JSON schema</summary>
 ///
 /// ```json
 ///{
-///  "title": "GasKeyView",
+///  "title": "GasKeyInfo",
 ///  "type": "object",
 ///  "required": [
 ///    "balance",
-///    "num_nonces",
-///    "permission"
+///    "num_nonces"
 ///  ],
 ///  "properties": {
 ///    "balance": {
@@ -6707,21 +7095,18 @@ Empty list means any method name can be used.*/
 ///    },
 ///    "num_nonces": {
 ///      "type": "integer",
-///      "format": "uint32",
+///      "format": "uint16",
+///      "maximum": 65535.0,
 ///      "minimum": 0.0
-///    },
-///    "permission": {
-///      "$ref": "#/definitions/AccessKeyPermissionView"
 ///    }
 ///  }
 ///}
 /// ```
 /// </details>
 #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug)]
-pub struct GasKeyView {
+pub struct GasKeyInfo {
     pub balance: NearToken,
-    pub num_nonces: u32,
-    pub permission: AccessKeyPermissionView,
+    pub num_nonces: u16,
 }
 ///Configuration for garbage collection.
 ///
@@ -8663,6 +9048,72 @@ pub enum InvalidAccessKeyError {
 ///        }
 ///      },
 ///      "additionalProperties": false
+///    },
+///    {
+///      "title": "InvalidNonceIndex",
+///      "description": "Transaction is specifying an invalid nonce index. Gas key transactions\nmust have a nonce_index in valid range, regular transactions must not.",
+///      "type": "object",
+///      "required": [
+///        "InvalidNonceIndex"
+///      ],
+///      "properties": {
+///        "InvalidNonceIndex": {
+///          "type": "object",
+///          "required": [
+///            "num_nonces"
+///          ],
+///          "properties": {
+///            "num_nonces": {
+///              "description": "Number of nonces supported by the key. 0 means no nonce_index allowed (regular key).",
+///              "type": "integer",
+///              "format": "uint16",
+///              "maximum": 65535.0,
+///              "minimum": 0.0
+///            },
+///            "tx_nonce_index": {
+///              "description": "The nonce_index from the transaction (None if missing).",
+///              "type": [
+///                "integer",
+///                "null"
+///              ],
+///              "format": "uint16",
+///              "maximum": 65535.0,
+///              "minimum": 0.0
+///            }
+///          }
+///        }
+///      },
+///      "additionalProperties": false
+///    },
+///    {
+///      "title": "NotEnoughGasKeyBalance",
+///      "description": "Gas key does not have enough balance to cover gas costs.",
+///      "type": "object",
+///      "required": [
+///        "NotEnoughGasKeyBalance"
+///      ],
+///      "properties": {
+///        "NotEnoughGasKeyBalance": {
+///          "type": "object",
+///          "required": [
+///            "balance",
+///            "cost",
+///            "signer_id"
+///          ],
+///          "properties": {
+///            "balance": {
+///              "$ref": "#/definitions/NearToken"
+///            },
+///            "cost": {
+///              "$ref": "#/definitions/NearToken"
+///            },
+///            "signer_id": {
+///              "$ref": "#/definitions/AccountId"
+///            }
+///          }
+///        }
+///      },
+///      "additionalProperties": false
 ///    }
 ///  ]
 ///}
@@ -8721,6 +9172,17 @@ new transaction until it can make progress again.*/
         ///The shard that fails making progress.
         shard_id: u32,
     },
+    /**Transaction is specifying an invalid nonce index. Gas key transactions
+must have a nonce_index in valid range, regular transactions must not.*/
+    InvalidNonceIndex {
+        ///Number of nonces supported by the key. 0 means no nonce_index allowed (regular key).
+        num_nonces: u16,
+        ///The nonce_index from the transaction (None if missing).
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        tx_nonce_index: ::std::option::Option<u16>,
+    },
+    ///Gas key does not have enough balance to cover gas costs.
+    NotEnoughGasKeyBalance { balance: NearToken, cost: NearToken, signer_id: AccountId },
 }
 impl ::std::convert::From<InvalidAccessKeyError> for InvalidTxError {
     fn from(value: InvalidAccessKeyError) -> Self {
@@ -9868,6 +10330,32 @@ pub struct NextEpochValidatorInfo {
 ///        }
 ///      },
 ///      "additionalProperties": false
+///    },
+///    {
+///      "title": "TransferToGasKey",
+///      "type": "object",
+///      "required": [
+///        "TransferToGasKey"
+///      ],
+///      "properties": {
+///        "TransferToGasKey": {
+///          "$ref": "#/definitions/TransferToGasKeyAction"
+///        }
+///      },
+///      "additionalProperties": false
+///    },
+///    {
+///      "title": "WithdrawFromGasKey",
+///      "type": "object",
+///      "required": [
+///        "WithdrawFromGasKey"
+///      ],
+///      "properties": {
+///        "WithdrawFromGasKey": {
+///          "$ref": "#/definitions/WithdrawFromGasKeyAction"
+///        }
+///      },
+///      "additionalProperties": false
 ///    }
 ///  ]
 ///}
@@ -9890,6 +10378,8 @@ a new account ID must pass validation rules described here
     DeployGlobalContract(DeployGlobalContractAction),
     UseGlobalContract(UseGlobalContractAction),
     DeterministicStateInit(DeterministicStateInitAction),
+    TransferToGasKey(TransferToGasKeyAction),
+    WithdrawFromGasKey(WithdrawFromGasKeyAction),
 }
 impl ::std::convert::From<CreateAccountAction> for NonDelegateAction {
     fn from(value: CreateAccountAction) -> Self {
@@ -9944,6 +10434,16 @@ impl ::std::convert::From<UseGlobalContractAction> for NonDelegateAction {
 impl ::std::convert::From<DeterministicStateInitAction> for NonDelegateAction {
     fn from(value: DeterministicStateInitAction) -> Self {
         Self::DeterministicStateInit(value)
+    }
+}
+impl ::std::convert::From<TransferToGasKeyAction> for NonDelegateAction {
+    fn from(value: TransferToGasKeyAction) -> Self {
+        Self::TransferToGasKey(value)
+    }
+}
+impl ::std::convert::From<WithdrawFromGasKeyAction> for NonDelegateAction {
+    fn from(value: WithdrawFromGasKeyAction) -> Self {
+        Self::WithdrawFromGasKey(value)
     }
 }
 ///Peer id is the public key.
@@ -10433,6 +10933,234 @@ impl ::std::fmt::Display for PublicKey {
         self.0.fmt(f)
     }
 }
+///`QueryRequest`
+///
+/// <details><summary>JSON schema</summary>
+///
+/// ```json
+///{
+///  "title": "QueryRequest",
+///  "oneOf": [
+///    {
+///      "title": "ViewAccount",
+///      "type": "object",
+///      "required": [
+///        "account_id",
+///        "request_type"
+///      ],
+///      "properties": {
+///        "account_id": {
+///          "$ref": "#/definitions/AccountId"
+///        },
+///        "request_type": {
+///          "type": "string",
+///          "const": "view_account"
+///        }
+///      }
+///    },
+///    {
+///      "title": "ViewCode",
+///      "type": "object",
+///      "required": [
+///        "account_id",
+///        "request_type"
+///      ],
+///      "properties": {
+///        "account_id": {
+///          "$ref": "#/definitions/AccountId"
+///        },
+///        "request_type": {
+///          "type": "string",
+///          "const": "view_code"
+///        }
+///      }
+///    },
+///    {
+///      "title": "ViewState",
+///      "type": "object",
+///      "required": [
+///        "account_id",
+///        "prefix_base64",
+///        "request_type"
+///      ],
+///      "properties": {
+///        "account_id": {
+///          "$ref": "#/definitions/AccountId"
+///        },
+///        "include_proof": {
+///          "type": "boolean"
+///        },
+///        "prefix_base64": {
+///          "$ref": "#/definitions/StoreKey"
+///        },
+///        "request_type": {
+///          "type": "string",
+///          "const": "view_state"
+///        }
+///      }
+///    },
+///    {
+///      "title": "ViewAccessKey",
+///      "type": "object",
+///      "required": [
+///        "account_id",
+///        "public_key",
+///        "request_type"
+///      ],
+///      "properties": {
+///        "account_id": {
+///          "$ref": "#/definitions/AccountId"
+///        },
+///        "public_key": {
+///          "$ref": "#/definitions/PublicKey"
+///        },
+///        "request_type": {
+///          "type": "string",
+///          "const": "view_access_key"
+///        }
+///      }
+///    },
+///    {
+///      "title": "ViewAccessKeyList",
+///      "type": "object",
+///      "required": [
+///        "account_id",
+///        "request_type"
+///      ],
+///      "properties": {
+///        "account_id": {
+///          "$ref": "#/definitions/AccountId"
+///        },
+///        "request_type": {
+///          "type": "string",
+///          "const": "view_access_key_list"
+///        }
+///      }
+///    },
+///    {
+///      "title": "ViewGasKeyNonces",
+///      "type": "object",
+///      "required": [
+///        "account_id",
+///        "public_key",
+///        "request_type"
+///      ],
+///      "properties": {
+///        "account_id": {
+///          "$ref": "#/definitions/AccountId"
+///        },
+///        "public_key": {
+///          "$ref": "#/definitions/PublicKey"
+///        },
+///        "request_type": {
+///          "type": "string",
+///          "const": "view_gas_key_nonces"
+///        }
+///      }
+///    },
+///    {
+///      "title": "CallFunction",
+///      "type": "object",
+///      "required": [
+///        "account_id",
+///        "args_base64",
+///        "method_name",
+///        "request_type"
+///      ],
+///      "properties": {
+///        "account_id": {
+///          "$ref": "#/definitions/AccountId"
+///        },
+///        "args_base64": {
+///          "$ref": "#/definitions/FunctionArgs"
+///        },
+///        "method_name": {
+///          "type": "string"
+///        },
+///        "request_type": {
+///          "type": "string",
+///          "const": "call_function"
+///        }
+///      }
+///    },
+///    {
+///      "title": "ViewGlobalContractCode",
+///      "type": "object",
+///      "required": [
+///        "code_hash",
+///        "request_type"
+///      ],
+///      "properties": {
+///        "code_hash": {
+///          "$ref": "#/definitions/CryptoHash"
+///        },
+///        "request_type": {
+///          "type": "string",
+///          "const": "view_global_contract_code"
+///        }
+///      }
+///    },
+///    {
+///      "title": "ViewGlobalContractCodeByAccountId",
+///      "type": "object",
+///      "required": [
+///        "account_id",
+///        "request_type"
+///      ],
+///      "properties": {
+///        "account_id": {
+///          "$ref": "#/definitions/AccountId"
+///        },
+///        "request_type": {
+///          "type": "string",
+///          "const": "view_global_contract_code_by_account_id"
+///        }
+///      }
+///    }
+///  ]
+///}
+/// ```
+/// </details>
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug)]
+#[serde(tag = "request_type")]
+pub enum QueryRequest {
+    ///ViewAccount
+    #[serde(rename = "view_account")]
+    ViewAccount { account_id: AccountId },
+    ///ViewCode
+    #[serde(rename = "view_code")]
+    ViewCode { account_id: AccountId },
+    ///ViewState
+    #[serde(rename = "view_state")]
+    ViewState {
+        account_id: AccountId,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        include_proof: ::std::option::Option<bool>,
+        prefix_base64: StoreKey,
+    },
+    ///ViewAccessKey
+    #[serde(rename = "view_access_key")]
+    ViewAccessKey { account_id: AccountId, public_key: PublicKey },
+    ///ViewAccessKeyList
+    #[serde(rename = "view_access_key_list")]
+    ViewAccessKeyList { account_id: AccountId },
+    ///ViewGasKeyNonces
+    #[serde(rename = "view_gas_key_nonces")]
+    ViewGasKeyNonces { account_id: AccountId, public_key: PublicKey },
+    ///CallFunction
+    #[serde(rename = "call_function")]
+    CallFunction {
+        account_id: AccountId,
+        args_base64: FunctionArgs,
+        method_name: ::std::string::String,
+    },
+    ///ViewGlobalContractCode
+    #[serde(rename = "view_global_contract_code")]
+    ViewGlobalContractCode { code_hash: CryptoHash },
+    ///ViewGlobalContractCodeByAccountId
+    #[serde(rename = "view_global_contract_code_by_account_id")]
+    ViewGlobalContractCodeByAccountId { account_id: AccountId },
+}
 ///`ReceiptEnumView`
 ///
 /// <details><summary>JSON schema</summary>
@@ -10880,6 +11608,7 @@ impl ::std::convert::From<ActionsValidationError> for ReceiptValidationError {
 ///      "$ref": "#/definitions/AccountId"
 ///    },
 ///    "priority": {
+///      "description": "Deprecated, retained for backward compatibility.",
 ///      "default": 0,
 ///      "type": "integer",
 ///      "format": "uint64",
@@ -10901,6 +11630,7 @@ impl ::std::convert::From<ActionsValidationError> for ReceiptValidationError {
 #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug)]
 pub struct ReceiptView {
     pub predecessor_id: AccountId,
+    ///Deprecated, retained for backward compatibility.
     #[serde(default)]
     pub priority: u64,
     pub receipt: ReceiptEnumView,
@@ -11168,9 +11898,10 @@ for RpcClientConfigRequest {
 ///    "chunk_request_retry_period",
 ///    "chunk_validation_threads",
 ///    "chunk_wait_mult",
+///    "chunks_cache_height_horizon",
 ///    "client_background_migration_threads",
+///    "disable_tx_routing",
 ///    "doomslug_step_period",
-///    "dynamic_resharding_dry_run",
 ///    "enable_early_prepare_transactions",
 ///    "enable_multiline_logging",
 ///    "enable_statistics_export",
@@ -11197,6 +11928,7 @@ for RpcClientConfigRequest {
 ///    "resharding_config",
 ///    "save_invalid_witnesses",
 ///    "save_latest_witnesses",
+///    "save_state_changes",
 ///    "save_trie_changes",
 ///    "save_tx_outcomes",
 ///    "save_untracked_partial_chunks_parts",
@@ -11302,6 +12034,12 @@ for RpcClientConfigRequest {
 ///      "maxItems": 2,
 ///      "minItems": 2
 ///    },
+///    "chunks_cache_height_horizon": {
+///      "description": "Height horizon for the chunk cache. A chunk is removed from the cache\nif its height + chunks_cache_height_horizon < largest_seen_height.\nThe default value is DEFAULT_CHUNKS_CACHE_HEIGHT_HORIZON.",
+///      "type": "integer",
+///      "format": "uint64",
+///      "minimum": 0.0
+///    },
 ///    "client_background_migration_threads": {
 ///      "description": "Number of threads to execute background migration work in client.",
 ///      "type": "integer",
@@ -11319,6 +12057,10 @@ for RpcClientConfigRequest {
 ///        }
 ///      ]
 ///    },
+///    "disable_tx_routing": {
+///      "description": "If true, the node won't forward transactions to next the chunk producers.",
+///      "type": "boolean"
+///    },
 ///    "doomslug_step_period": {
 ///      "description": "Time between running doomslug timer.",
 ///      "type": "array",
@@ -11329,10 +12071,6 @@ for RpcClientConfigRequest {
 ///      },
 ///      "maxItems": 2,
 ///      "minItems": 2
-///    },
-///    "dynamic_resharding_dry_run": {
-///      "description": "If true, the runtime will do a dynamic resharding 'dry run' at the last block of each epoch.\nThis means calculating tentative boundary accounts for splitting the tracked shards.",
-///      "type": "boolean"
 ///    },
 ///    "enable_early_prepare_transactions": {
 ///      "description": "If true, transactions for the next chunk will be prepared early, right after the previous chunk's\npost-state is ready. This can help produce chunks faster, for high-throughput chains.\nThe current implementation increases latency on low-load chains, which will be fixed in the future.\nThe default is disabled.",
@@ -11533,6 +12271,10 @@ for RpcClientConfigRequest {
 ///    },
 ///    "save_latest_witnesses": {
 ///      "description": "Save observed instances of ChunkStateWitness to the database in DBCol::LatestChunkStateWitnesses.\nSaving the latest witnesses is useful for analysis and debugging.\nThis option can cause extra load on the database and is not recommended for production use.",
+///      "type": "boolean"
+///    },
+///    "save_state_changes": {
+///      "description": "Whether to persist state changes on disk or not.",
 ///      "type": "boolean"
 ///    },
 ///    "save_trie_changes": {
@@ -11753,17 +12495,20 @@ latency due to the need of requesting chunks over the peer-to-peer network.*/
     pub chunk_validation_threads: u32,
     ///Multiplier for the wait time for all chunks to be received.
     pub chunk_wait_mult: [i32; 2usize],
+    /**Height horizon for the chunk cache. A chunk is removed from the cache
+if its height + chunks_cache_height_horizon < largest_seen_height.
+The default value is DEFAULT_CHUNKS_CACHE_HEIGHT_HORIZON.*/
+    pub chunks_cache_height_horizon: u64,
     ///Number of threads to execute background migration work in client.
     pub client_background_migration_threads: u32,
     /**Configuration for a cloud-based archival writer. If this config is present, the writer is enabled and
 writes chunk-related data based on the tracked shards.*/
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub cloud_archival_writer: ::std::option::Option<CloudArchivalWriterConfig>,
+    ///If true, the node won't forward transactions to next the chunk producers.
+    pub disable_tx_routing: bool,
     ///Time between running doomslug timer.
     pub doomslug_step_period: [u64; 2usize],
-    /**If true, the runtime will do a dynamic resharding 'dry run' at the last block of each epoch.
-This means calculating tentative boundary accounts for splitting the tracked shards.*/
-    pub dynamic_resharding_dry_run: bool,
     /**If true, transactions for the next chunk will be prepared early, right after the previous chunk's
 post-state is ready. This can help produce chunks faster, for high-throughput chains.
 The current implementation increases latency on low-load chains, which will be fixed in the future.
@@ -11838,6 +12583,8 @@ This option can cause extra load on the database and is not recommended for prod
 Saving the latest witnesses is useful for analysis and debugging.
 This option can cause extra load on the database and is not recommended for production use.*/
     pub save_latest_witnesses: bool,
+    ///Whether to persist state changes on disk or not.
+    pub save_state_changes: bool,
     /**save_trie_changes should be set to true iff
 - archive if false - non-archival nodes need trie changes to perform garbage collection
 - archive is true, cold_store is configured and migration to split_storage is finished - node
@@ -13028,565 +13775,263 @@ shard assignments might become, for example, `[S_2, S_0, S_3, S_1]`.*/
 ///{
 ///  "title": "RpcQueryRequest",
 ///  "type": "object",
-///  "oneOf": [
+///  "allOf": [
 ///    {
-///      "title": "BlockIdViewAccount",
+///      "$ref": "#/definitions/BlockReference"
+///    },
+///    {
+///      "$ref": "#/definitions/QueryRequest"
+///    }
+///  ]
+///}
+/// ```
+/// </details>
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug)]
+#[serde(untagged)]
+pub enum RpcQueryRequest {
+    Variant0(RpcQueryRequestVariant0),
+    Variant1(RpcQueryRequestVariant1),
+    Variant2(RpcQueryRequestVariant2),
+}
+impl ::std::convert::From<RpcQueryRequestVariant0> for RpcQueryRequest {
+    fn from(value: RpcQueryRequestVariant0) -> Self {
+        Self::Variant0(value)
+    }
+}
+impl ::std::convert::From<RpcQueryRequestVariant1> for RpcQueryRequest {
+    fn from(value: RpcQueryRequestVariant1) -> Self {
+        Self::Variant1(value)
+    }
+}
+impl ::std::convert::From<RpcQueryRequestVariant2> for RpcQueryRequest {
+    fn from(value: RpcQueryRequestVariant2) -> Self {
+        Self::Variant2(value)
+    }
+}
+///`RpcQueryRequestVariant0`
+///
+/// <details><summary>JSON schema</summary>
+///
+/// ```json
+///{
+///  "allOf": [
+///    {
+///      "oneOf": [
+///        {
+///          "title": "ViewAccount",
+///          "type": "object",
+///          "required": [
+///            "account_id",
+///            "request_type"
+///          ],
+///          "properties": {
+///            "account_id": {
+///              "$ref": "#/definitions/AccountId"
+///            },
+///            "request_type": {
+///              "type": "string",
+///              "const": "view_account"
+///            }
+///          }
+///        },
+///        {
+///          "title": "ViewCode",
+///          "type": "object",
+///          "required": [
+///            "account_id",
+///            "request_type"
+///          ],
+///          "properties": {
+///            "account_id": {
+///              "$ref": "#/definitions/AccountId"
+///            },
+///            "request_type": {
+///              "type": "string",
+///              "const": "view_code"
+///            }
+///          }
+///        },
+///        {
+///          "title": "ViewState",
+///          "type": "object",
+///          "required": [
+///            "account_id",
+///            "prefix_base64",
+///            "request_type"
+///          ],
+///          "properties": {
+///            "account_id": {
+///              "$ref": "#/definitions/AccountId"
+///            },
+///            "include_proof": {
+///              "type": "boolean"
+///            },
+///            "prefix_base64": {
+///              "$ref": "#/definitions/StoreKey"
+///            },
+///            "request_type": {
+///              "type": "string",
+///              "const": "view_state"
+///            }
+///          }
+///        },
+///        {
+///          "title": "ViewAccessKey",
+///          "type": "object",
+///          "required": [
+///            "account_id",
+///            "public_key",
+///            "request_type"
+///          ],
+///          "properties": {
+///            "account_id": {
+///              "$ref": "#/definitions/AccountId"
+///            },
+///            "public_key": {
+///              "$ref": "#/definitions/PublicKey"
+///            },
+///            "request_type": {
+///              "type": "string",
+///              "const": "view_access_key"
+///            }
+///          }
+///        },
+///        {
+///          "title": "ViewAccessKeyList",
+///          "type": "object",
+///          "required": [
+///            "account_id",
+///            "request_type"
+///          ],
+///          "properties": {
+///            "account_id": {
+///              "$ref": "#/definitions/AccountId"
+///            },
+///            "request_type": {
+///              "type": "string",
+///              "const": "view_access_key_list"
+///            }
+///          }
+///        },
+///        {
+///          "title": "ViewGasKeyNonces",
+///          "type": "object",
+///          "required": [
+///            "account_id",
+///            "public_key",
+///            "request_type"
+///          ],
+///          "properties": {
+///            "account_id": {
+///              "$ref": "#/definitions/AccountId"
+///            },
+///            "public_key": {
+///              "$ref": "#/definitions/PublicKey"
+///            },
+///            "request_type": {
+///              "type": "string",
+///              "const": "view_gas_key_nonces"
+///            }
+///          }
+///        },
+///        {
+///          "title": "CallFunction",
+///          "type": "object",
+///          "required": [
+///            "account_id",
+///            "args_base64",
+///            "method_name",
+///            "request_type"
+///          ],
+///          "properties": {
+///            "account_id": {
+///              "$ref": "#/definitions/AccountId"
+///            },
+///            "args_base64": {
+///              "$ref": "#/definitions/FunctionArgs"
+///            },
+///            "method_name": {
+///              "type": "string"
+///            },
+///            "request_type": {
+///              "type": "string",
+///              "const": "call_function"
+///            }
+///          }
+///        },
+///        {
+///          "title": "ViewGlobalContractCode",
+///          "type": "object",
+///          "required": [
+///            "code_hash",
+///            "request_type"
+///          ],
+///          "properties": {
+///            "code_hash": {
+///              "$ref": "#/definitions/CryptoHash"
+///            },
+///            "request_type": {
+///              "type": "string",
+///              "const": "view_global_contract_code"
+///            }
+///          }
+///        },
+///        {
+///          "title": "ViewGlobalContractCodeByAccountId",
+///          "type": "object",
+///          "required": [
+///            "account_id",
+///            "request_type"
+///          ],
+///          "properties": {
+///            "account_id": {
+///              "$ref": "#/definitions/AccountId"
+///            },
+///            "request_type": {
+///              "type": "string",
+///              "const": "view_global_contract_code_by_account_id"
+///            }
+///          }
+///        }
+///      ]
+///    },
+///    {
+///      "title": "BlockId",
 ///      "type": "object",
 ///      "required": [
-///        "account_id",
-///        "block_id",
-///        "request_type"
+///        "block_id"
 ///      ],
 ///      "properties": {
-///        "account_id": {
-///          "$ref": "#/definitions/AccountId"
-///        },
 ///        "block_id": {
 ///          "$ref": "#/definitions/BlockId"
-///        },
-///        "request_type": {
-///          "type": "string",
-///          "const": "view_account"
 ///        }
 ///      }
 ///    },
 ///    {
-///      "title": "BlockIdViewCode",
-///      "type": "object",
-///      "required": [
-///        "account_id",
-///        "block_id",
-///        "request_type"
-///      ],
-///      "properties": {
-///        "account_id": {
-///          "$ref": "#/definitions/AccountId"
-///        },
-///        "block_id": {
-///          "$ref": "#/definitions/BlockId"
-///        },
-///        "request_type": {
-///          "type": "string",
-///          "const": "view_code"
+///      "not": {
+///        "title": "Finality",
+///        "type": "object",
+///        "required": [
+///          "finality"
+///        ],
+///        "properties": {
+///          "finality": {
+///            "$ref": "#/definitions/Finality"
+///          }
 ///        }
 ///      }
 ///    },
 ///    {
-///      "title": "BlockIdViewState",
-///      "type": "object",
-///      "required": [
-///        "account_id",
-///        "block_id",
-///        "prefix_base64",
-///        "request_type"
-///      ],
-///      "properties": {
-///        "account_id": {
-///          "$ref": "#/definitions/AccountId"
-///        },
-///        "block_id": {
-///          "$ref": "#/definitions/BlockId"
-///        },
-///        "include_proof": {
-///          "type": "boolean"
-///        },
-///        "prefix_base64": {
-///          "$ref": "#/definitions/StoreKey"
-///        },
-///        "request_type": {
-///          "type": "string",
-///          "const": "view_state"
-///        }
-///      }
-///    },
-///    {
-///      "title": "BlockIdViewAccessKey",
-///      "type": "object",
-///      "required": [
-///        "account_id",
-///        "block_id",
-///        "public_key",
-///        "request_type"
-///      ],
-///      "properties": {
-///        "account_id": {
-///          "$ref": "#/definitions/AccountId"
-///        },
-///        "block_id": {
-///          "$ref": "#/definitions/BlockId"
-///        },
-///        "public_key": {
-///          "$ref": "#/definitions/PublicKey"
-///        },
-///        "request_type": {
-///          "type": "string",
-///          "const": "view_access_key"
-///        }
-///      }
-///    },
-///    {
-///      "title": "BlockIdViewAccessKeyList",
-///      "type": "object",
-///      "required": [
-///        "account_id",
-///        "block_id",
-///        "request_type"
-///      ],
-///      "properties": {
-///        "account_id": {
-///          "$ref": "#/definitions/AccountId"
-///        },
-///        "block_id": {
-///          "$ref": "#/definitions/BlockId"
-///        },
-///        "request_type": {
-///          "type": "string",
-///          "const": "view_access_key_list"
-///        }
-///      }
-///    },
-///    {
-///      "title": "BlockIdCallFunction",
-///      "type": "object",
-///      "required": [
-///        "account_id",
-///        "args_base64",
-///        "block_id",
-///        "method_name",
-///        "request_type"
-///      ],
-///      "properties": {
-///        "account_id": {
-///          "$ref": "#/definitions/AccountId"
-///        },
-///        "args_base64": {
-///          "$ref": "#/definitions/FunctionArgs"
-///        },
-///        "block_id": {
-///          "$ref": "#/definitions/BlockId"
-///        },
-///        "method_name": {
-///          "type": "string"
-///        },
-///        "request_type": {
-///          "type": "string",
-///          "const": "call_function"
-///        }
-///      }
-///    },
-///    {
-///      "title": "BlockIdViewGlobalContractCode",
-///      "type": "object",
-///      "required": [
-///        "block_id",
-///        "code_hash",
-///        "request_type"
-///      ],
-///      "properties": {
-///        "block_id": {
-///          "$ref": "#/definitions/BlockId"
-///        },
-///        "code_hash": {
-///          "$ref": "#/definitions/CryptoHash"
-///        },
-///        "request_type": {
-///          "type": "string",
-///          "const": "view_global_contract_code"
-///        }
-///      }
-///    },
-///    {
-///      "title": "BlockIdViewGlobalContractCodeByAccountId",
-///      "type": "object",
-///      "required": [
-///        "account_id",
-///        "block_id",
-///        "request_type"
-///      ],
-///      "properties": {
-///        "account_id": {
-///          "$ref": "#/definitions/AccountId"
-///        },
-///        "block_id": {
-///          "$ref": "#/definitions/BlockId"
-///        },
-///        "request_type": {
-///          "type": "string",
-///          "const": "view_global_contract_code_by_account_id"
-///        }
-///      }
-///    },
-///    {
-///      "title": "FinalityViewAccount",
-///      "type": "object",
-///      "required": [
-///        "account_id",
-///        "finality",
-///        "request_type"
-///      ],
-///      "properties": {
-///        "account_id": {
-///          "$ref": "#/definitions/AccountId"
-///        },
-///        "finality": {
-///          "$ref": "#/definitions/Finality"
-///        },
-///        "request_type": {
-///          "type": "string",
-///          "const": "view_account"
-///        }
-///      }
-///    },
-///    {
-///      "title": "FinalityViewCode",
-///      "type": "object",
-///      "required": [
-///        "account_id",
-///        "finality",
-///        "request_type"
-///      ],
-///      "properties": {
-///        "account_id": {
-///          "$ref": "#/definitions/AccountId"
-///        },
-///        "finality": {
-///          "$ref": "#/definitions/Finality"
-///        },
-///        "request_type": {
-///          "type": "string",
-///          "const": "view_code"
-///        }
-///      }
-///    },
-///    {
-///      "title": "FinalityViewState",
-///      "type": "object",
-///      "required": [
-///        "account_id",
-///        "finality",
-///        "prefix_base64",
-///        "request_type"
-///      ],
-///      "properties": {
-///        "account_id": {
-///          "$ref": "#/definitions/AccountId"
-///        },
-///        "finality": {
-///          "$ref": "#/definitions/Finality"
-///        },
-///        "include_proof": {
-///          "type": "boolean"
-///        },
-///        "prefix_base64": {
-///          "$ref": "#/definitions/StoreKey"
-///        },
-///        "request_type": {
-///          "type": "string",
-///          "const": "view_state"
-///        }
-///      }
-///    },
-///    {
-///      "title": "FinalityViewAccessKey",
-///      "type": "object",
-///      "required": [
-///        "account_id",
-///        "finality",
-///        "public_key",
-///        "request_type"
-///      ],
-///      "properties": {
-///        "account_id": {
-///          "$ref": "#/definitions/AccountId"
-///        },
-///        "finality": {
-///          "$ref": "#/definitions/Finality"
-///        },
-///        "public_key": {
-///          "$ref": "#/definitions/PublicKey"
-///        },
-///        "request_type": {
-///          "type": "string",
-///          "const": "view_access_key"
-///        }
-///      }
-///    },
-///    {
-///      "title": "FinalityViewAccessKeyList",
-///      "type": "object",
-///      "required": [
-///        "account_id",
-///        "finality",
-///        "request_type"
-///      ],
-///      "properties": {
-///        "account_id": {
-///          "$ref": "#/definitions/AccountId"
-///        },
-///        "finality": {
-///          "$ref": "#/definitions/Finality"
-///        },
-///        "request_type": {
-///          "type": "string",
-///          "const": "view_access_key_list"
-///        }
-///      }
-///    },
-///    {
-///      "title": "FinalityCallFunction",
-///      "type": "object",
-///      "required": [
-///        "account_id",
-///        "args_base64",
-///        "finality",
-///        "method_name",
-///        "request_type"
-///      ],
-///      "properties": {
-///        "account_id": {
-///          "$ref": "#/definitions/AccountId"
-///        },
-///        "args_base64": {
-///          "$ref": "#/definitions/FunctionArgs"
-///        },
-///        "finality": {
-///          "$ref": "#/definitions/Finality"
-///        },
-///        "method_name": {
-///          "type": "string"
-///        },
-///        "request_type": {
-///          "type": "string",
-///          "const": "call_function"
-///        }
-///      }
-///    },
-///    {
-///      "title": "FinalityViewGlobalContractCode",
-///      "type": "object",
-///      "required": [
-///        "code_hash",
-///        "finality",
-///        "request_type"
-///      ],
-///      "properties": {
-///        "code_hash": {
-///          "$ref": "#/definitions/CryptoHash"
-///        },
-///        "finality": {
-///          "$ref": "#/definitions/Finality"
-///        },
-///        "request_type": {
-///          "type": "string",
-///          "const": "view_global_contract_code"
-///        }
-///      }
-///    },
-///    {
-///      "title": "FinalityViewGlobalContractCodeByAccountId",
-///      "type": "object",
-///      "required": [
-///        "account_id",
-///        "finality",
-///        "request_type"
-///      ],
-///      "properties": {
-///        "account_id": {
-///          "$ref": "#/definitions/AccountId"
-///        },
-///        "finality": {
-///          "$ref": "#/definitions/Finality"
-///        },
-///        "request_type": {
-///          "type": "string",
-///          "const": "view_global_contract_code_by_account_id"
-///        }
-///      }
-///    },
-///    {
-///      "title": "SyncCheckpointViewAccount",
-///      "type": "object",
-///      "required": [
-///        "account_id",
-///        "request_type",
-///        "sync_checkpoint"
-///      ],
-///      "properties": {
-///        "account_id": {
-///          "$ref": "#/definitions/AccountId"
-///        },
-///        "request_type": {
-///          "type": "string",
-///          "const": "view_account"
-///        },
-///        "sync_checkpoint": {
-///          "$ref": "#/definitions/SyncCheckpoint"
-///        }
-///      }
-///    },
-///    {
-///      "title": "SyncCheckpointViewCode",
-///      "type": "object",
-///      "required": [
-///        "account_id",
-///        "request_type",
-///        "sync_checkpoint"
-///      ],
-///      "properties": {
-///        "account_id": {
-///          "$ref": "#/definitions/AccountId"
-///        },
-///        "request_type": {
-///          "type": "string",
-///          "const": "view_code"
-///        },
-///        "sync_checkpoint": {
-///          "$ref": "#/definitions/SyncCheckpoint"
-///        }
-///      }
-///    },
-///    {
-///      "title": "SyncCheckpointViewState",
-///      "type": "object",
-///      "required": [
-///        "account_id",
-///        "prefix_base64",
-///        "request_type",
-///        "sync_checkpoint"
-///      ],
-///      "properties": {
-///        "account_id": {
-///          "$ref": "#/definitions/AccountId"
-///        },
-///        "include_proof": {
-///          "type": "boolean"
-///        },
-///        "prefix_base64": {
-///          "$ref": "#/definitions/StoreKey"
-///        },
-///        "request_type": {
-///          "type": "string",
-///          "const": "view_state"
-///        },
-///        "sync_checkpoint": {
-///          "$ref": "#/definitions/SyncCheckpoint"
-///        }
-///      }
-///    },
-///    {
-///      "title": "SyncCheckpointViewAccessKey",
-///      "type": "object",
-///      "required": [
-///        "account_id",
-///        "public_key",
-///        "request_type",
-///        "sync_checkpoint"
-///      ],
-///      "properties": {
-///        "account_id": {
-///          "$ref": "#/definitions/AccountId"
-///        },
-///        "public_key": {
-///          "$ref": "#/definitions/PublicKey"
-///        },
-///        "request_type": {
-///          "type": "string",
-///          "const": "view_access_key"
-///        },
-///        "sync_checkpoint": {
-///          "$ref": "#/definitions/SyncCheckpoint"
-///        }
-///      }
-///    },
-///    {
-///      "title": "SyncCheckpointViewAccessKeyList",
-///      "type": "object",
-///      "required": [
-///        "account_id",
-///        "request_type",
-///        "sync_checkpoint"
-///      ],
-///      "properties": {
-///        "account_id": {
-///          "$ref": "#/definitions/AccountId"
-///        },
-///        "request_type": {
-///          "type": "string",
-///          "const": "view_access_key_list"
-///        },
-///        "sync_checkpoint": {
-///          "$ref": "#/definitions/SyncCheckpoint"
-///        }
-///      }
-///    },
-///    {
-///      "title": "SyncCheckpointCallFunction",
-///      "type": "object",
-///      "required": [
-///        "account_id",
-///        "args_base64",
-///        "method_name",
-///        "request_type",
-///        "sync_checkpoint"
-///      ],
-///      "properties": {
-///        "account_id": {
-///          "$ref": "#/definitions/AccountId"
-///        },
-///        "args_base64": {
-///          "$ref": "#/definitions/FunctionArgs"
-///        },
-///        "method_name": {
-///          "type": "string"
-///        },
-///        "request_type": {
-///          "type": "string",
-///          "const": "call_function"
-///        },
-///        "sync_checkpoint": {
-///          "$ref": "#/definitions/SyncCheckpoint"
-///        }
-///      }
-///    },
-///    {
-///      "title": "SyncCheckpointViewGlobalContractCode",
-///      "type": "object",
-///      "required": [
-///        "code_hash",
-///        "request_type",
-///        "sync_checkpoint"
-///      ],
-///      "properties": {
-///        "code_hash": {
-///          "$ref": "#/definitions/CryptoHash"
-///        },
-///        "request_type": {
-///          "type": "string",
-///          "const": "view_global_contract_code"
-///        },
-///        "sync_checkpoint": {
-///          "$ref": "#/definitions/SyncCheckpoint"
-///        }
-///      }
-///    },
-///    {
-///      "title": "SyncCheckpointViewGlobalContractCodeByAccountId",
-///      "type": "object",
-///      "required": [
-///        "account_id",
-///        "request_type",
-///        "sync_checkpoint"
-///      ],
-///      "properties": {
-///        "account_id": {
-///          "$ref": "#/definitions/AccountId"
-///        },
-///        "request_type": {
-///          "type": "string",
-///          "const": "view_global_contract_code_by_account_id"
-///        },
-///        "sync_checkpoint": {
-///          "$ref": "#/definitions/SyncCheckpoint"
+///      "not": {
+///        "title": "SyncCheckpoint",
+///        "type": "object",
+///        "required": [
+///          "sync_checkpoint"
+///        ],
+///        "properties": {
+///          "sync_checkpoint": {
+///            "$ref": "#/definitions/SyncCheckpoint"
+///          }
 ///        }
 ///      }
 ///    }
@@ -13596,18 +14041,18 @@ shard assignments might become, for example, `[S_2, S_0, S_3, S_1]`.*/
 /// </details>
 #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug)]
 #[serde(untagged)]
-pub enum RpcQueryRequest {
-    BlockIdViewAccount {
+pub enum RpcQueryRequestVariant0 {
+    Variant0 {
         account_id: AccountId,
         block_id: BlockId,
         request_type: ::std::string::String,
     },
-    BlockIdViewCode {
+    Variant1 {
         account_id: AccountId,
         block_id: BlockId,
         request_type: ::std::string::String,
     },
-    BlockIdViewState {
+    Variant2 {
         account_id: AccountId,
         block_id: BlockId,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
@@ -13615,45 +14060,286 @@ pub enum RpcQueryRequest {
         prefix_base64: StoreKey,
         request_type: ::std::string::String,
     },
-    BlockIdViewAccessKey {
+    Variant3 {
         account_id: AccountId,
         block_id: BlockId,
         public_key: PublicKey,
         request_type: ::std::string::String,
     },
-    BlockIdViewAccessKeyList {
+    Variant4 {
         account_id: AccountId,
         block_id: BlockId,
         request_type: ::std::string::String,
     },
-    BlockIdCallFunction {
+    Variant5 {
+        account_id: AccountId,
+        block_id: BlockId,
+        public_key: PublicKey,
+        request_type: ::std::string::String,
+    },
+    Variant6 {
         account_id: AccountId,
         args_base64: FunctionArgs,
         block_id: BlockId,
         method_name: ::std::string::String,
         request_type: ::std::string::String,
     },
-    BlockIdViewGlobalContractCode {
+    Variant7 {
         block_id: BlockId,
         code_hash: CryptoHash,
         request_type: ::std::string::String,
     },
-    BlockIdViewGlobalContractCodeByAccountId {
+    Variant8 {
         account_id: AccountId,
         block_id: BlockId,
         request_type: ::std::string::String,
     },
-    FinalityViewAccount {
+}
+///`RpcQueryRequestVariant1`
+///
+/// <details><summary>JSON schema</summary>
+///
+/// ```json
+///{
+///  "allOf": [
+///    {
+///      "oneOf": [
+///        {
+///          "title": "ViewAccount",
+///          "type": "object",
+///          "required": [
+///            "account_id",
+///            "request_type"
+///          ],
+///          "properties": {
+///            "account_id": {
+///              "$ref": "#/definitions/AccountId"
+///            },
+///            "request_type": {
+///              "type": "string",
+///              "const": "view_account"
+///            }
+///          }
+///        },
+///        {
+///          "title": "ViewCode",
+///          "type": "object",
+///          "required": [
+///            "account_id",
+///            "request_type"
+///          ],
+///          "properties": {
+///            "account_id": {
+///              "$ref": "#/definitions/AccountId"
+///            },
+///            "request_type": {
+///              "type": "string",
+///              "const": "view_code"
+///            }
+///          }
+///        },
+///        {
+///          "title": "ViewState",
+///          "type": "object",
+///          "required": [
+///            "account_id",
+///            "prefix_base64",
+///            "request_type"
+///          ],
+///          "properties": {
+///            "account_id": {
+///              "$ref": "#/definitions/AccountId"
+///            },
+///            "include_proof": {
+///              "type": "boolean"
+///            },
+///            "prefix_base64": {
+///              "$ref": "#/definitions/StoreKey"
+///            },
+///            "request_type": {
+///              "type": "string",
+///              "const": "view_state"
+///            }
+///          }
+///        },
+///        {
+///          "title": "ViewAccessKey",
+///          "type": "object",
+///          "required": [
+///            "account_id",
+///            "public_key",
+///            "request_type"
+///          ],
+///          "properties": {
+///            "account_id": {
+///              "$ref": "#/definitions/AccountId"
+///            },
+///            "public_key": {
+///              "$ref": "#/definitions/PublicKey"
+///            },
+///            "request_type": {
+///              "type": "string",
+///              "const": "view_access_key"
+///            }
+///          }
+///        },
+///        {
+///          "title": "ViewAccessKeyList",
+///          "type": "object",
+///          "required": [
+///            "account_id",
+///            "request_type"
+///          ],
+///          "properties": {
+///            "account_id": {
+///              "$ref": "#/definitions/AccountId"
+///            },
+///            "request_type": {
+///              "type": "string",
+///              "const": "view_access_key_list"
+///            }
+///          }
+///        },
+///        {
+///          "title": "ViewGasKeyNonces",
+///          "type": "object",
+///          "required": [
+///            "account_id",
+///            "public_key",
+///            "request_type"
+///          ],
+///          "properties": {
+///            "account_id": {
+///              "$ref": "#/definitions/AccountId"
+///            },
+///            "public_key": {
+///              "$ref": "#/definitions/PublicKey"
+///            },
+///            "request_type": {
+///              "type": "string",
+///              "const": "view_gas_key_nonces"
+///            }
+///          }
+///        },
+///        {
+///          "title": "CallFunction",
+///          "type": "object",
+///          "required": [
+///            "account_id",
+///            "args_base64",
+///            "method_name",
+///            "request_type"
+///          ],
+///          "properties": {
+///            "account_id": {
+///              "$ref": "#/definitions/AccountId"
+///            },
+///            "args_base64": {
+///              "$ref": "#/definitions/FunctionArgs"
+///            },
+///            "method_name": {
+///              "type": "string"
+///            },
+///            "request_type": {
+///              "type": "string",
+///              "const": "call_function"
+///            }
+///          }
+///        },
+///        {
+///          "title": "ViewGlobalContractCode",
+///          "type": "object",
+///          "required": [
+///            "code_hash",
+///            "request_type"
+///          ],
+///          "properties": {
+///            "code_hash": {
+///              "$ref": "#/definitions/CryptoHash"
+///            },
+///            "request_type": {
+///              "type": "string",
+///              "const": "view_global_contract_code"
+///            }
+///          }
+///        },
+///        {
+///          "title": "ViewGlobalContractCodeByAccountId",
+///          "type": "object",
+///          "required": [
+///            "account_id",
+///            "request_type"
+///          ],
+///          "properties": {
+///            "account_id": {
+///              "$ref": "#/definitions/AccountId"
+///            },
+///            "request_type": {
+///              "type": "string",
+///              "const": "view_global_contract_code_by_account_id"
+///            }
+///          }
+///        }
+///      ]
+///    },
+///    {
+///      "title": "Finality",
+///      "type": "object",
+///      "required": [
+///        "finality"
+///      ],
+///      "properties": {
+///        "finality": {
+///          "$ref": "#/definitions/Finality"
+///        }
+///      }
+///    },
+///    {
+///      "not": {
+///        "title": "BlockId",
+///        "type": "object",
+///        "required": [
+///          "block_id"
+///        ],
+///        "properties": {
+///          "block_id": {
+///            "$ref": "#/definitions/BlockId"
+///          }
+///        }
+///      }
+///    },
+///    {
+///      "not": {
+///        "title": "SyncCheckpoint",
+///        "type": "object",
+///        "required": [
+///          "sync_checkpoint"
+///        ],
+///        "properties": {
+///          "sync_checkpoint": {
+///            "$ref": "#/definitions/SyncCheckpoint"
+///          }
+///        }
+///      }
+///    }
+///  ]
+///}
+/// ```
+/// </details>
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug)]
+#[serde(untagged)]
+pub enum RpcQueryRequestVariant1 {
+    Variant0 {
         account_id: AccountId,
         finality: Finality,
         request_type: ::std::string::String,
     },
-    FinalityViewCode {
+    Variant1 {
         account_id: AccountId,
         finality: Finality,
         request_type: ::std::string::String,
     },
-    FinalityViewState {
+    Variant2 {
         account_id: AccountId,
         finality: Finality,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
@@ -13661,45 +14347,286 @@ pub enum RpcQueryRequest {
         prefix_base64: StoreKey,
         request_type: ::std::string::String,
     },
-    FinalityViewAccessKey {
+    Variant3 {
         account_id: AccountId,
         finality: Finality,
         public_key: PublicKey,
         request_type: ::std::string::String,
     },
-    FinalityViewAccessKeyList {
+    Variant4 {
         account_id: AccountId,
         finality: Finality,
         request_type: ::std::string::String,
     },
-    FinalityCallFunction {
+    Variant5 {
+        account_id: AccountId,
+        finality: Finality,
+        public_key: PublicKey,
+        request_type: ::std::string::String,
+    },
+    Variant6 {
         account_id: AccountId,
         args_base64: FunctionArgs,
         finality: Finality,
         method_name: ::std::string::String,
         request_type: ::std::string::String,
     },
-    FinalityViewGlobalContractCode {
+    Variant7 {
         code_hash: CryptoHash,
         finality: Finality,
         request_type: ::std::string::String,
     },
-    FinalityViewGlobalContractCodeByAccountId {
+    Variant8 {
         account_id: AccountId,
         finality: Finality,
         request_type: ::std::string::String,
     },
-    SyncCheckpointViewAccount {
+}
+///`RpcQueryRequestVariant2`
+///
+/// <details><summary>JSON schema</summary>
+///
+/// ```json
+///{
+///  "allOf": [
+///    {
+///      "oneOf": [
+///        {
+///          "title": "ViewAccount",
+///          "type": "object",
+///          "required": [
+///            "account_id",
+///            "request_type"
+///          ],
+///          "properties": {
+///            "account_id": {
+///              "$ref": "#/definitions/AccountId"
+///            },
+///            "request_type": {
+///              "type": "string",
+///              "const": "view_account"
+///            }
+///          }
+///        },
+///        {
+///          "title": "ViewCode",
+///          "type": "object",
+///          "required": [
+///            "account_id",
+///            "request_type"
+///          ],
+///          "properties": {
+///            "account_id": {
+///              "$ref": "#/definitions/AccountId"
+///            },
+///            "request_type": {
+///              "type": "string",
+///              "const": "view_code"
+///            }
+///          }
+///        },
+///        {
+///          "title": "ViewState",
+///          "type": "object",
+///          "required": [
+///            "account_id",
+///            "prefix_base64",
+///            "request_type"
+///          ],
+///          "properties": {
+///            "account_id": {
+///              "$ref": "#/definitions/AccountId"
+///            },
+///            "include_proof": {
+///              "type": "boolean"
+///            },
+///            "prefix_base64": {
+///              "$ref": "#/definitions/StoreKey"
+///            },
+///            "request_type": {
+///              "type": "string",
+///              "const": "view_state"
+///            }
+///          }
+///        },
+///        {
+///          "title": "ViewAccessKey",
+///          "type": "object",
+///          "required": [
+///            "account_id",
+///            "public_key",
+///            "request_type"
+///          ],
+///          "properties": {
+///            "account_id": {
+///              "$ref": "#/definitions/AccountId"
+///            },
+///            "public_key": {
+///              "$ref": "#/definitions/PublicKey"
+///            },
+///            "request_type": {
+///              "type": "string",
+///              "const": "view_access_key"
+///            }
+///          }
+///        },
+///        {
+///          "title": "ViewAccessKeyList",
+///          "type": "object",
+///          "required": [
+///            "account_id",
+///            "request_type"
+///          ],
+///          "properties": {
+///            "account_id": {
+///              "$ref": "#/definitions/AccountId"
+///            },
+///            "request_type": {
+///              "type": "string",
+///              "const": "view_access_key_list"
+///            }
+///          }
+///        },
+///        {
+///          "title": "ViewGasKeyNonces",
+///          "type": "object",
+///          "required": [
+///            "account_id",
+///            "public_key",
+///            "request_type"
+///          ],
+///          "properties": {
+///            "account_id": {
+///              "$ref": "#/definitions/AccountId"
+///            },
+///            "public_key": {
+///              "$ref": "#/definitions/PublicKey"
+///            },
+///            "request_type": {
+///              "type": "string",
+///              "const": "view_gas_key_nonces"
+///            }
+///          }
+///        },
+///        {
+///          "title": "CallFunction",
+///          "type": "object",
+///          "required": [
+///            "account_id",
+///            "args_base64",
+///            "method_name",
+///            "request_type"
+///          ],
+///          "properties": {
+///            "account_id": {
+///              "$ref": "#/definitions/AccountId"
+///            },
+///            "args_base64": {
+///              "$ref": "#/definitions/FunctionArgs"
+///            },
+///            "method_name": {
+///              "type": "string"
+///            },
+///            "request_type": {
+///              "type": "string",
+///              "const": "call_function"
+///            }
+///          }
+///        },
+///        {
+///          "title": "ViewGlobalContractCode",
+///          "type": "object",
+///          "required": [
+///            "code_hash",
+///            "request_type"
+///          ],
+///          "properties": {
+///            "code_hash": {
+///              "$ref": "#/definitions/CryptoHash"
+///            },
+///            "request_type": {
+///              "type": "string",
+///              "const": "view_global_contract_code"
+///            }
+///          }
+///        },
+///        {
+///          "title": "ViewGlobalContractCodeByAccountId",
+///          "type": "object",
+///          "required": [
+///            "account_id",
+///            "request_type"
+///          ],
+///          "properties": {
+///            "account_id": {
+///              "$ref": "#/definitions/AccountId"
+///            },
+///            "request_type": {
+///              "type": "string",
+///              "const": "view_global_contract_code_by_account_id"
+///            }
+///          }
+///        }
+///      ]
+///    },
+///    {
+///      "title": "SyncCheckpoint",
+///      "type": "object",
+///      "required": [
+///        "sync_checkpoint"
+///      ],
+///      "properties": {
+///        "sync_checkpoint": {
+///          "$ref": "#/definitions/SyncCheckpoint"
+///        }
+///      }
+///    },
+///    {
+///      "not": {
+///        "title": "BlockId",
+///        "type": "object",
+///        "required": [
+///          "block_id"
+///        ],
+///        "properties": {
+///          "block_id": {
+///            "$ref": "#/definitions/BlockId"
+///          }
+///        }
+///      }
+///    },
+///    {
+///      "not": {
+///        "title": "Finality",
+///        "type": "object",
+///        "required": [
+///          "finality"
+///        ],
+///        "properties": {
+///          "finality": {
+///            "$ref": "#/definitions/Finality"
+///          }
+///        }
+///      }
+///    }
+///  ]
+///}
+/// ```
+/// </details>
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug)]
+#[serde(untagged)]
+pub enum RpcQueryRequestVariant2 {
+    Variant0 {
         account_id: AccountId,
         request_type: ::std::string::String,
         sync_checkpoint: SyncCheckpoint,
     },
-    SyncCheckpointViewCode {
+    Variant1 {
         account_id: AccountId,
         request_type: ::std::string::String,
         sync_checkpoint: SyncCheckpoint,
     },
-    SyncCheckpointViewState {
+    Variant2 {
         account_id: AccountId,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         include_proof: ::std::option::Option<bool>,
@@ -13707,30 +14634,36 @@ pub enum RpcQueryRequest {
         request_type: ::std::string::String,
         sync_checkpoint: SyncCheckpoint,
     },
-    SyncCheckpointViewAccessKey {
+    Variant3 {
         account_id: AccountId,
         public_key: PublicKey,
         request_type: ::std::string::String,
         sync_checkpoint: SyncCheckpoint,
     },
-    SyncCheckpointViewAccessKeyList {
+    Variant4 {
         account_id: AccountId,
         request_type: ::std::string::String,
         sync_checkpoint: SyncCheckpoint,
     },
-    SyncCheckpointCallFunction {
+    Variant5 {
+        account_id: AccountId,
+        public_key: PublicKey,
+        request_type: ::std::string::String,
+        sync_checkpoint: SyncCheckpoint,
+    },
+    Variant6 {
         account_id: AccountId,
         args_base64: FunctionArgs,
         method_name: ::std::string::String,
         request_type: ::std::string::String,
         sync_checkpoint: SyncCheckpoint,
     },
-    SyncCheckpointViewGlobalContractCode {
+    Variant7 {
         code_hash: CryptoHash,
         request_type: ::std::string::String,
         sync_checkpoint: SyncCheckpoint,
     },
-    SyncCheckpointViewGlobalContractCodeByAccountId {
+    Variant8 {
         account_id: AccountId,
         request_type: ::std::string::String,
         sync_checkpoint: SyncCheckpoint,
@@ -13894,6 +14827,36 @@ pub enum RpcQueryRequest {
 ///          "$ref": "#/definitions/AccessKeyList"
 ///        }
 ///      ]
+///    },
+///    {
+///      "title": "BlockHeightBlockHash",
+///      "allOf": [
+///        {
+///          "type": "object",
+///          "required": [
+///            "block_hash",
+///            "block_height"
+///          ],
+///          "properties": {
+///            "block_hash": {
+///              "$ref": "#/definitions/CryptoHash"
+///            },
+///            "block_height": {
+///              "type": "integer",
+///              "format": "uint64",
+///              "minimum": 0.0
+///            }
+///          }
+///        },
+///        {
+///          "type": "array",
+///          "items": {
+///            "type": "integer",
+///            "format": "uint64",
+///            "minimum": 0.0
+///          }
+///        }
+///      ]
 ///    }
 ///  ]
 ///}
@@ -13947,7 +14910,64 @@ pub enum RpcQueryResponse {
         block_height: u64,
         keys: ::std::vec::Vec<AccessKeyInfoView>,
     },
+    BlockHeightBlockHash(RpcQueryResponseBlockHeightBlockHash),
 }
+impl ::std::convert::From<RpcQueryResponseBlockHeightBlockHash> for RpcQueryResponse {
+    fn from(value: RpcQueryResponseBlockHeightBlockHash) -> Self {
+        Self::BlockHeightBlockHash(value)
+    }
+}
+///`RpcQueryResponseBlockHeightBlockHash`
+///
+/// <details><summary>JSON schema</summary>
+///
+/// ```json
+///{
+///  "title": "BlockHeightBlockHash",
+///  "allOf": [
+///    {
+///      "type": "object",
+///      "required": [
+///        "block_hash",
+///        "block_height"
+///      ],
+///      "properties": {
+///        "block_hash": {
+///          "$ref": "#/definitions/CryptoHash"
+///        },
+///        "block_height": {
+///          "type": "integer",
+///          "format": "uint64",
+///          "minimum": 0.0
+///        }
+///      }
+///    },
+///    {
+///      "type": "array",
+///      "items": {
+///        "type": "integer",
+///        "format": "uint64",
+///        "minimum": 0.0
+///      }
+///    }
+///  ]
+///}
+/// ```
+/// </details>
+#[derive(
+    ::serde::Deserialize,
+    ::serde::Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd
+)]
+#[serde(deny_unknown_fields)]
+pub enum RpcQueryResponseBlockHeightBlockHash {}
 ///`RpcReceiptRequest`
 ///
 /// <details><summary>JSON schema</summary>
@@ -13990,6 +15010,7 @@ pub struct RpcReceiptRequest {
 ///      "$ref": "#/definitions/AccountId"
 ///    },
 ///    "priority": {
+///      "description": "Deprecated, retained for backward compatibility.",
 ///      "default": 0,
 ///      "type": "integer",
 ///      "format": "uint64",
@@ -14011,6 +15032,7 @@ pub struct RpcReceiptRequest {
 #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug)]
 pub struct RpcReceiptResponse {
     pub predecessor_id: AccountId,
+    ///Deprecated, retained for backward compatibility.
     #[serde(default)]
     pub priority: u64,
     pub receipt: ReceiptEnumView,
@@ -14163,520 +15185,194 @@ impl ::std::default::Default for RpcSplitStorageInfoResponse {
 ///  "title": "RpcStateChangesInBlockByTypeRequest",
 ///  "description": "It is a [serializable view] of [`StateChangesRequest`].\n\n[serializable view]: ./index.html\n[`StateChangesRequest`]: ../types/struct.StateChangesRequest.html",
 ///  "type": "object",
-///  "oneOf": [
+///  "allOf": [
 ///    {
-///      "title": "BlockIdAccountChanges",
-///      "type": "object",
-///      "required": [
-///        "account_ids",
-///        "block_id",
-///        "changes_type"
-///      ],
-///      "properties": {
-///        "account_ids": {
-///          "type": "array",
-///          "items": {
-///            "$ref": "#/definitions/AccountId"
+///      "$ref": "#/definitions/BlockReference"
+///    },
+///    {
+///      "$ref": "#/definitions/StateChangesRequestView"
+///    }
+///  ]
+///}
+/// ```
+/// </details>
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug)]
+#[serde(untagged)]
+pub enum RpcStateChangesInBlockByTypeRequest {
+    Variant0(RpcStateChangesInBlockByTypeRequestVariant0),
+    Variant1(RpcStateChangesInBlockByTypeRequestVariant1),
+    Variant2(RpcStateChangesInBlockByTypeRequestVariant2),
+}
+impl ::std::convert::From<RpcStateChangesInBlockByTypeRequestVariant0>
+for RpcStateChangesInBlockByTypeRequest {
+    fn from(value: RpcStateChangesInBlockByTypeRequestVariant0) -> Self {
+        Self::Variant0(value)
+    }
+}
+impl ::std::convert::From<RpcStateChangesInBlockByTypeRequestVariant1>
+for RpcStateChangesInBlockByTypeRequest {
+    fn from(value: RpcStateChangesInBlockByTypeRequestVariant1) -> Self {
+        Self::Variant1(value)
+    }
+}
+impl ::std::convert::From<RpcStateChangesInBlockByTypeRequestVariant2>
+for RpcStateChangesInBlockByTypeRequest {
+    fn from(value: RpcStateChangesInBlockByTypeRequestVariant2) -> Self {
+        Self::Variant2(value)
+    }
+}
+///`RpcStateChangesInBlockByTypeRequestVariant0`
+///
+/// <details><summary>JSON schema</summary>
+///
+/// ```json
+///{
+///  "allOf": [
+///    {
+///      "oneOf": [
+///        {
+///          "title": "AccountChanges",
+///          "type": "object",
+///          "required": [
+///            "account_ids",
+///            "changes_type"
+///          ],
+///          "properties": {
+///            "account_ids": {
+///              "type": "array",
+///              "items": {
+///                "$ref": "#/definitions/AccountId"
+///              }
+///            },
+///            "changes_type": {
+///              "type": "string",
+///              "const": "account_changes"
+///            }
 ///          }
 ///        },
+///        {
+///          "title": "SingleAccessKeyChanges",
+///          "type": "object",
+///          "required": [
+///            "changes_type",
+///            "keys"
+///          ],
+///          "properties": {
+///            "changes_type": {
+///              "type": "string",
+///              "const": "single_access_key_changes"
+///            },
+///            "keys": {
+///              "type": "array",
+///              "items": {
+///                "$ref": "#/definitions/AccountWithPublicKey"
+///              }
+///            }
+///          }
+///        },
+///        {
+///          "title": "AllAccessKeyChanges",
+///          "type": "object",
+///          "required": [
+///            "account_ids",
+///            "changes_type"
+///          ],
+///          "properties": {
+///            "account_ids": {
+///              "type": "array",
+///              "items": {
+///                "$ref": "#/definitions/AccountId"
+///              }
+///            },
+///            "changes_type": {
+///              "type": "string",
+///              "const": "all_access_key_changes"
+///            }
+///          }
+///        },
+///        {
+///          "title": "ContractCodeChanges",
+///          "type": "object",
+///          "required": [
+///            "account_ids",
+///            "changes_type"
+///          ],
+///          "properties": {
+///            "account_ids": {
+///              "type": "array",
+///              "items": {
+///                "$ref": "#/definitions/AccountId"
+///              }
+///            },
+///            "changes_type": {
+///              "type": "string",
+///              "const": "contract_code_changes"
+///            }
+///          }
+///        },
+///        {
+///          "title": "DataChanges",
+///          "type": "object",
+///          "required": [
+///            "account_ids",
+///            "changes_type",
+///            "key_prefix_base64"
+///          ],
+///          "properties": {
+///            "account_ids": {
+///              "type": "array",
+///              "items": {
+///                "$ref": "#/definitions/AccountId"
+///              }
+///            },
+///            "changes_type": {
+///              "type": "string",
+///              "const": "data_changes"
+///            },
+///            "key_prefix_base64": {
+///              "$ref": "#/definitions/StoreKey"
+///            }
+///          }
+///        }
+///      ]
+///    },
+///    {
+///      "title": "BlockId",
+///      "type": "object",
+///      "required": [
+///        "block_id"
+///      ],
+///      "properties": {
 ///        "block_id": {
 ///          "$ref": "#/definitions/BlockId"
-///        },
-///        "changes_type": {
-///          "type": "string",
-///          "const": "account_changes"
 ///        }
 ///      }
 ///    },
 ///    {
-///      "title": "BlockIdSingleAccessKeyChanges",
-///      "type": "object",
-///      "required": [
-///        "block_id",
-///        "changes_type",
-///        "keys"
-///      ],
-///      "properties": {
-///        "block_id": {
-///          "$ref": "#/definitions/BlockId"
-///        },
-///        "changes_type": {
-///          "type": "string",
-///          "const": "single_access_key_changes"
-///        },
-///        "keys": {
-///          "type": "array",
-///          "items": {
-///            "$ref": "#/definitions/AccountWithPublicKey"
+///      "not": {
+///        "title": "Finality",
+///        "type": "object",
+///        "required": [
+///          "finality"
+///        ],
+///        "properties": {
+///          "finality": {
+///            "$ref": "#/definitions/Finality"
 ///          }
 ///        }
 ///      }
 ///    },
 ///    {
-///      "title": "BlockIdSingleGasKeyChanges",
-///      "type": "object",
-///      "required": [
-///        "block_id",
-///        "changes_type",
-///        "keys"
-///      ],
-///      "properties": {
-///        "block_id": {
-///          "$ref": "#/definitions/BlockId"
-///        },
-///        "changes_type": {
-///          "type": "string",
-///          "const": "single_gas_key_changes"
-///        },
-///        "keys": {
-///          "type": "array",
-///          "items": {
-///            "$ref": "#/definitions/AccountWithPublicKey"
+///      "not": {
+///        "title": "SyncCheckpoint",
+///        "type": "object",
+///        "required": [
+///          "sync_checkpoint"
+///        ],
+///        "properties": {
+///          "sync_checkpoint": {
+///            "$ref": "#/definitions/SyncCheckpoint"
 ///          }
-///        }
-///      }
-///    },
-///    {
-///      "title": "BlockIdAllAccessKeyChanges",
-///      "type": "object",
-///      "required": [
-///        "account_ids",
-///        "block_id",
-///        "changes_type"
-///      ],
-///      "properties": {
-///        "account_ids": {
-///          "type": "array",
-///          "items": {
-///            "$ref": "#/definitions/AccountId"
-///          }
-///        },
-///        "block_id": {
-///          "$ref": "#/definitions/BlockId"
-///        },
-///        "changes_type": {
-///          "type": "string",
-///          "const": "all_access_key_changes"
-///        }
-///      }
-///    },
-///    {
-///      "title": "BlockIdAllGasKeyChanges",
-///      "type": "object",
-///      "required": [
-///        "account_ids",
-///        "block_id",
-///        "changes_type"
-///      ],
-///      "properties": {
-///        "account_ids": {
-///          "type": "array",
-///          "items": {
-///            "$ref": "#/definitions/AccountId"
-///          }
-///        },
-///        "block_id": {
-///          "$ref": "#/definitions/BlockId"
-///        },
-///        "changes_type": {
-///          "type": "string",
-///          "const": "all_gas_key_changes"
-///        }
-///      }
-///    },
-///    {
-///      "title": "BlockIdContractCodeChanges",
-///      "type": "object",
-///      "required": [
-///        "account_ids",
-///        "block_id",
-///        "changes_type"
-///      ],
-///      "properties": {
-///        "account_ids": {
-///          "type": "array",
-///          "items": {
-///            "$ref": "#/definitions/AccountId"
-///          }
-///        },
-///        "block_id": {
-///          "$ref": "#/definitions/BlockId"
-///        },
-///        "changes_type": {
-///          "type": "string",
-///          "const": "contract_code_changes"
-///        }
-///      }
-///    },
-///    {
-///      "title": "BlockIdDataChanges",
-///      "type": "object",
-///      "required": [
-///        "account_ids",
-///        "block_id",
-///        "changes_type",
-///        "key_prefix_base64"
-///      ],
-///      "properties": {
-///        "account_ids": {
-///          "type": "array",
-///          "items": {
-///            "$ref": "#/definitions/AccountId"
-///          }
-///        },
-///        "block_id": {
-///          "$ref": "#/definitions/BlockId"
-///        },
-///        "changes_type": {
-///          "type": "string",
-///          "const": "data_changes"
-///        },
-///        "key_prefix_base64": {
-///          "$ref": "#/definitions/StoreKey"
-///        }
-///      }
-///    },
-///    {
-///      "title": "FinalityAccountChanges",
-///      "type": "object",
-///      "required": [
-///        "account_ids",
-///        "changes_type",
-///        "finality"
-///      ],
-///      "properties": {
-///        "account_ids": {
-///          "type": "array",
-///          "items": {
-///            "$ref": "#/definitions/AccountId"
-///          }
-///        },
-///        "changes_type": {
-///          "type": "string",
-///          "const": "account_changes"
-///        },
-///        "finality": {
-///          "$ref": "#/definitions/Finality"
-///        }
-///      }
-///    },
-///    {
-///      "title": "FinalitySingleAccessKeyChanges",
-///      "type": "object",
-///      "required": [
-///        "changes_type",
-///        "finality",
-///        "keys"
-///      ],
-///      "properties": {
-///        "changes_type": {
-///          "type": "string",
-///          "const": "single_access_key_changes"
-///        },
-///        "finality": {
-///          "$ref": "#/definitions/Finality"
-///        },
-///        "keys": {
-///          "type": "array",
-///          "items": {
-///            "$ref": "#/definitions/AccountWithPublicKey"
-///          }
-///        }
-///      }
-///    },
-///    {
-///      "title": "FinalitySingleGasKeyChanges",
-///      "type": "object",
-///      "required": [
-///        "changes_type",
-///        "finality",
-///        "keys"
-///      ],
-///      "properties": {
-///        "changes_type": {
-///          "type": "string",
-///          "const": "single_gas_key_changes"
-///        },
-///        "finality": {
-///          "$ref": "#/definitions/Finality"
-///        },
-///        "keys": {
-///          "type": "array",
-///          "items": {
-///            "$ref": "#/definitions/AccountWithPublicKey"
-///          }
-///        }
-///      }
-///    },
-///    {
-///      "title": "FinalityAllAccessKeyChanges",
-///      "type": "object",
-///      "required": [
-///        "account_ids",
-///        "changes_type",
-///        "finality"
-///      ],
-///      "properties": {
-///        "account_ids": {
-///          "type": "array",
-///          "items": {
-///            "$ref": "#/definitions/AccountId"
-///          }
-///        },
-///        "changes_type": {
-///          "type": "string",
-///          "const": "all_access_key_changes"
-///        },
-///        "finality": {
-///          "$ref": "#/definitions/Finality"
-///        }
-///      }
-///    },
-///    {
-///      "title": "FinalityAllGasKeyChanges",
-///      "type": "object",
-///      "required": [
-///        "account_ids",
-///        "changes_type",
-///        "finality"
-///      ],
-///      "properties": {
-///        "account_ids": {
-///          "type": "array",
-///          "items": {
-///            "$ref": "#/definitions/AccountId"
-///          }
-///        },
-///        "changes_type": {
-///          "type": "string",
-///          "const": "all_gas_key_changes"
-///        },
-///        "finality": {
-///          "$ref": "#/definitions/Finality"
-///        }
-///      }
-///    },
-///    {
-///      "title": "FinalityContractCodeChanges",
-///      "type": "object",
-///      "required": [
-///        "account_ids",
-///        "changes_type",
-///        "finality"
-///      ],
-///      "properties": {
-///        "account_ids": {
-///          "type": "array",
-///          "items": {
-///            "$ref": "#/definitions/AccountId"
-///          }
-///        },
-///        "changes_type": {
-///          "type": "string",
-///          "const": "contract_code_changes"
-///        },
-///        "finality": {
-///          "$ref": "#/definitions/Finality"
-///        }
-///      }
-///    },
-///    {
-///      "title": "FinalityDataChanges",
-///      "type": "object",
-///      "required": [
-///        "account_ids",
-///        "changes_type",
-///        "finality",
-///        "key_prefix_base64"
-///      ],
-///      "properties": {
-///        "account_ids": {
-///          "type": "array",
-///          "items": {
-///            "$ref": "#/definitions/AccountId"
-///          }
-///        },
-///        "changes_type": {
-///          "type": "string",
-///          "const": "data_changes"
-///        },
-///        "finality": {
-///          "$ref": "#/definitions/Finality"
-///        },
-///        "key_prefix_base64": {
-///          "$ref": "#/definitions/StoreKey"
-///        }
-///      }
-///    },
-///    {
-///      "title": "SyncCheckpointAccountChanges",
-///      "type": "object",
-///      "required": [
-///        "account_ids",
-///        "changes_type",
-///        "sync_checkpoint"
-///      ],
-///      "properties": {
-///        "account_ids": {
-///          "type": "array",
-///          "items": {
-///            "$ref": "#/definitions/AccountId"
-///          }
-///        },
-///        "changes_type": {
-///          "type": "string",
-///          "const": "account_changes"
-///        },
-///        "sync_checkpoint": {
-///          "$ref": "#/definitions/SyncCheckpoint"
-///        }
-///      }
-///    },
-///    {
-///      "title": "SyncCheckpointSingleAccessKeyChanges",
-///      "type": "object",
-///      "required": [
-///        "changes_type",
-///        "keys",
-///        "sync_checkpoint"
-///      ],
-///      "properties": {
-///        "changes_type": {
-///          "type": "string",
-///          "const": "single_access_key_changes"
-///        },
-///        "keys": {
-///          "type": "array",
-///          "items": {
-///            "$ref": "#/definitions/AccountWithPublicKey"
-///          }
-///        },
-///        "sync_checkpoint": {
-///          "$ref": "#/definitions/SyncCheckpoint"
-///        }
-///      }
-///    },
-///    {
-///      "title": "SyncCheckpointSingleGasKeyChanges",
-///      "type": "object",
-///      "required": [
-///        "changes_type",
-///        "keys",
-///        "sync_checkpoint"
-///      ],
-///      "properties": {
-///        "changes_type": {
-///          "type": "string",
-///          "const": "single_gas_key_changes"
-///        },
-///        "keys": {
-///          "type": "array",
-///          "items": {
-///            "$ref": "#/definitions/AccountWithPublicKey"
-///          }
-///        },
-///        "sync_checkpoint": {
-///          "$ref": "#/definitions/SyncCheckpoint"
-///        }
-///      }
-///    },
-///    {
-///      "title": "SyncCheckpointAllAccessKeyChanges",
-///      "type": "object",
-///      "required": [
-///        "account_ids",
-///        "changes_type",
-///        "sync_checkpoint"
-///      ],
-///      "properties": {
-///        "account_ids": {
-///          "type": "array",
-///          "items": {
-///            "$ref": "#/definitions/AccountId"
-///          }
-///        },
-///        "changes_type": {
-///          "type": "string",
-///          "const": "all_access_key_changes"
-///        },
-///        "sync_checkpoint": {
-///          "$ref": "#/definitions/SyncCheckpoint"
-///        }
-///      }
-///    },
-///    {
-///      "title": "SyncCheckpointAllGasKeyChanges",
-///      "type": "object",
-///      "required": [
-///        "account_ids",
-///        "changes_type",
-///        "sync_checkpoint"
-///      ],
-///      "properties": {
-///        "account_ids": {
-///          "type": "array",
-///          "items": {
-///            "$ref": "#/definitions/AccountId"
-///          }
-///        },
-///        "changes_type": {
-///          "type": "string",
-///          "const": "all_gas_key_changes"
-///        },
-///        "sync_checkpoint": {
-///          "$ref": "#/definitions/SyncCheckpoint"
-///        }
-///      }
-///    },
-///    {
-///      "title": "SyncCheckpointContractCodeChanges",
-///      "type": "object",
-///      "required": [
-///        "account_ids",
-///        "changes_type",
-///        "sync_checkpoint"
-///      ],
-///      "properties": {
-///        "account_ids": {
-///          "type": "array",
-///          "items": {
-///            "$ref": "#/definitions/AccountId"
-///          }
-///        },
-///        "changes_type": {
-///          "type": "string",
-///          "const": "contract_code_changes"
-///        },
-///        "sync_checkpoint": {
-///          "$ref": "#/definitions/SyncCheckpoint"
-///        }
-///      }
-///    },
-///    {
-///      "title": "SyncCheckpointDataChanges",
-///      "type": "object",
-///      "required": [
-///        "account_ids",
-///        "changes_type",
-///        "key_prefix_base64",
-///        "sync_checkpoint"
-///      ],
-///      "properties": {
-///        "account_ids": {
-///          "type": "array",
-///          "items": {
-///            "$ref": "#/definitions/AccountId"
-///          }
-///        },
-///        "changes_type": {
-///          "type": "string",
-///          "const": "data_changes"
-///        },
-///        "key_prefix_base64": {
-///          "$ref": "#/definitions/StoreKey"
-///        },
-///        "sync_checkpoint": {
-///          "$ref": "#/definitions/SyncCheckpoint"
 ///        }
 ///      }
 ///    }
@@ -14686,110 +15382,406 @@ impl ::std::default::Default for RpcSplitStorageInfoResponse {
 /// </details>
 #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug)]
 #[serde(untagged)]
-pub enum RpcStateChangesInBlockByTypeRequest {
-    BlockIdAccountChanges {
+pub enum RpcStateChangesInBlockByTypeRequestVariant0 {
+    Variant0 {
         account_ids: ::std::vec::Vec<AccountId>,
         block_id: BlockId,
         changes_type: ::std::string::String,
     },
-    BlockIdSingleAccessKeyChanges {
+    Variant1 {
         block_id: BlockId,
         changes_type: ::std::string::String,
         keys: ::std::vec::Vec<AccountWithPublicKey>,
     },
-    BlockIdSingleGasKeyChanges {
-        block_id: BlockId,
-        changes_type: ::std::string::String,
-        keys: ::std::vec::Vec<AccountWithPublicKey>,
-    },
-    BlockIdAllAccessKeyChanges {
+    Variant2 {
         account_ids: ::std::vec::Vec<AccountId>,
         block_id: BlockId,
         changes_type: ::std::string::String,
     },
-    BlockIdAllGasKeyChanges {
+    Variant3 {
         account_ids: ::std::vec::Vec<AccountId>,
         block_id: BlockId,
         changes_type: ::std::string::String,
     },
-    BlockIdContractCodeChanges {
-        account_ids: ::std::vec::Vec<AccountId>,
-        block_id: BlockId,
-        changes_type: ::std::string::String,
-    },
-    BlockIdDataChanges {
+    Variant4 {
         account_ids: ::std::vec::Vec<AccountId>,
         block_id: BlockId,
         changes_type: ::std::string::String,
         key_prefix_base64: StoreKey,
     },
-    FinalityAccountChanges {
+}
+///`RpcStateChangesInBlockByTypeRequestVariant1`
+///
+/// <details><summary>JSON schema</summary>
+///
+/// ```json
+///{
+///  "allOf": [
+///    {
+///      "oneOf": [
+///        {
+///          "title": "AccountChanges",
+///          "type": "object",
+///          "required": [
+///            "account_ids",
+///            "changes_type"
+///          ],
+///          "properties": {
+///            "account_ids": {
+///              "type": "array",
+///              "items": {
+///                "$ref": "#/definitions/AccountId"
+///              }
+///            },
+///            "changes_type": {
+///              "type": "string",
+///              "const": "account_changes"
+///            }
+///          }
+///        },
+///        {
+///          "title": "SingleAccessKeyChanges",
+///          "type": "object",
+///          "required": [
+///            "changes_type",
+///            "keys"
+///          ],
+///          "properties": {
+///            "changes_type": {
+///              "type": "string",
+///              "const": "single_access_key_changes"
+///            },
+///            "keys": {
+///              "type": "array",
+///              "items": {
+///                "$ref": "#/definitions/AccountWithPublicKey"
+///              }
+///            }
+///          }
+///        },
+///        {
+///          "title": "AllAccessKeyChanges",
+///          "type": "object",
+///          "required": [
+///            "account_ids",
+///            "changes_type"
+///          ],
+///          "properties": {
+///            "account_ids": {
+///              "type": "array",
+///              "items": {
+///                "$ref": "#/definitions/AccountId"
+///              }
+///            },
+///            "changes_type": {
+///              "type": "string",
+///              "const": "all_access_key_changes"
+///            }
+///          }
+///        },
+///        {
+///          "title": "ContractCodeChanges",
+///          "type": "object",
+///          "required": [
+///            "account_ids",
+///            "changes_type"
+///          ],
+///          "properties": {
+///            "account_ids": {
+///              "type": "array",
+///              "items": {
+///                "$ref": "#/definitions/AccountId"
+///              }
+///            },
+///            "changes_type": {
+///              "type": "string",
+///              "const": "contract_code_changes"
+///            }
+///          }
+///        },
+///        {
+///          "title": "DataChanges",
+///          "type": "object",
+///          "required": [
+///            "account_ids",
+///            "changes_type",
+///            "key_prefix_base64"
+///          ],
+///          "properties": {
+///            "account_ids": {
+///              "type": "array",
+///              "items": {
+///                "$ref": "#/definitions/AccountId"
+///              }
+///            },
+///            "changes_type": {
+///              "type": "string",
+///              "const": "data_changes"
+///            },
+///            "key_prefix_base64": {
+///              "$ref": "#/definitions/StoreKey"
+///            }
+///          }
+///        }
+///      ]
+///    },
+///    {
+///      "title": "Finality",
+///      "type": "object",
+///      "required": [
+///        "finality"
+///      ],
+///      "properties": {
+///        "finality": {
+///          "$ref": "#/definitions/Finality"
+///        }
+///      }
+///    },
+///    {
+///      "not": {
+///        "title": "BlockId",
+///        "type": "object",
+///        "required": [
+///          "block_id"
+///        ],
+///        "properties": {
+///          "block_id": {
+///            "$ref": "#/definitions/BlockId"
+///          }
+///        }
+///      }
+///    },
+///    {
+///      "not": {
+///        "title": "SyncCheckpoint",
+///        "type": "object",
+///        "required": [
+///          "sync_checkpoint"
+///        ],
+///        "properties": {
+///          "sync_checkpoint": {
+///            "$ref": "#/definitions/SyncCheckpoint"
+///          }
+///        }
+///      }
+///    }
+///  ]
+///}
+/// ```
+/// </details>
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug)]
+#[serde(untagged)]
+pub enum RpcStateChangesInBlockByTypeRequestVariant1 {
+    Variant0 {
         account_ids: ::std::vec::Vec<AccountId>,
         changes_type: ::std::string::String,
         finality: Finality,
     },
-    FinalitySingleAccessKeyChanges {
+    Variant1 {
         changes_type: ::std::string::String,
         finality: Finality,
         keys: ::std::vec::Vec<AccountWithPublicKey>,
     },
-    FinalitySingleGasKeyChanges {
-        changes_type: ::std::string::String,
-        finality: Finality,
-        keys: ::std::vec::Vec<AccountWithPublicKey>,
-    },
-    FinalityAllAccessKeyChanges {
+    Variant2 {
         account_ids: ::std::vec::Vec<AccountId>,
         changes_type: ::std::string::String,
         finality: Finality,
     },
-    FinalityAllGasKeyChanges {
+    Variant3 {
         account_ids: ::std::vec::Vec<AccountId>,
         changes_type: ::std::string::String,
         finality: Finality,
     },
-    FinalityContractCodeChanges {
-        account_ids: ::std::vec::Vec<AccountId>,
-        changes_type: ::std::string::String,
-        finality: Finality,
-    },
-    FinalityDataChanges {
+    Variant4 {
         account_ids: ::std::vec::Vec<AccountId>,
         changes_type: ::std::string::String,
         finality: Finality,
         key_prefix_base64: StoreKey,
     },
-    SyncCheckpointAccountChanges {
+}
+///`RpcStateChangesInBlockByTypeRequestVariant2`
+///
+/// <details><summary>JSON schema</summary>
+///
+/// ```json
+///{
+///  "allOf": [
+///    {
+///      "oneOf": [
+///        {
+///          "title": "AccountChanges",
+///          "type": "object",
+///          "required": [
+///            "account_ids",
+///            "changes_type"
+///          ],
+///          "properties": {
+///            "account_ids": {
+///              "type": "array",
+///              "items": {
+///                "$ref": "#/definitions/AccountId"
+///              }
+///            },
+///            "changes_type": {
+///              "type": "string",
+///              "const": "account_changes"
+///            }
+///          }
+///        },
+///        {
+///          "title": "SingleAccessKeyChanges",
+///          "type": "object",
+///          "required": [
+///            "changes_type",
+///            "keys"
+///          ],
+///          "properties": {
+///            "changes_type": {
+///              "type": "string",
+///              "const": "single_access_key_changes"
+///            },
+///            "keys": {
+///              "type": "array",
+///              "items": {
+///                "$ref": "#/definitions/AccountWithPublicKey"
+///              }
+///            }
+///          }
+///        },
+///        {
+///          "title": "AllAccessKeyChanges",
+///          "type": "object",
+///          "required": [
+///            "account_ids",
+///            "changes_type"
+///          ],
+///          "properties": {
+///            "account_ids": {
+///              "type": "array",
+///              "items": {
+///                "$ref": "#/definitions/AccountId"
+///              }
+///            },
+///            "changes_type": {
+///              "type": "string",
+///              "const": "all_access_key_changes"
+///            }
+///          }
+///        },
+///        {
+///          "title": "ContractCodeChanges",
+///          "type": "object",
+///          "required": [
+///            "account_ids",
+///            "changes_type"
+///          ],
+///          "properties": {
+///            "account_ids": {
+///              "type": "array",
+///              "items": {
+///                "$ref": "#/definitions/AccountId"
+///              }
+///            },
+///            "changes_type": {
+///              "type": "string",
+///              "const": "contract_code_changes"
+///            }
+///          }
+///        },
+///        {
+///          "title": "DataChanges",
+///          "type": "object",
+///          "required": [
+///            "account_ids",
+///            "changes_type",
+///            "key_prefix_base64"
+///          ],
+///          "properties": {
+///            "account_ids": {
+///              "type": "array",
+///              "items": {
+///                "$ref": "#/definitions/AccountId"
+///              }
+///            },
+///            "changes_type": {
+///              "type": "string",
+///              "const": "data_changes"
+///            },
+///            "key_prefix_base64": {
+///              "$ref": "#/definitions/StoreKey"
+///            }
+///          }
+///        }
+///      ]
+///    },
+///    {
+///      "title": "SyncCheckpoint",
+///      "type": "object",
+///      "required": [
+///        "sync_checkpoint"
+///      ],
+///      "properties": {
+///        "sync_checkpoint": {
+///          "$ref": "#/definitions/SyncCheckpoint"
+///        }
+///      }
+///    },
+///    {
+///      "not": {
+///        "title": "BlockId",
+///        "type": "object",
+///        "required": [
+///          "block_id"
+///        ],
+///        "properties": {
+///          "block_id": {
+///            "$ref": "#/definitions/BlockId"
+///          }
+///        }
+///      }
+///    },
+///    {
+///      "not": {
+///        "title": "Finality",
+///        "type": "object",
+///        "required": [
+///          "finality"
+///        ],
+///        "properties": {
+///          "finality": {
+///            "$ref": "#/definitions/Finality"
+///          }
+///        }
+///      }
+///    }
+///  ]
+///}
+/// ```
+/// </details>
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug)]
+#[serde(untagged)]
+pub enum RpcStateChangesInBlockByTypeRequestVariant2 {
+    Variant0 {
         account_ids: ::std::vec::Vec<AccountId>,
         changes_type: ::std::string::String,
         sync_checkpoint: SyncCheckpoint,
     },
-    SyncCheckpointSingleAccessKeyChanges {
+    Variant1 {
         changes_type: ::std::string::String,
         keys: ::std::vec::Vec<AccountWithPublicKey>,
         sync_checkpoint: SyncCheckpoint,
     },
-    SyncCheckpointSingleGasKeyChanges {
-        changes_type: ::std::string::String,
-        keys: ::std::vec::Vec<AccountWithPublicKey>,
-        sync_checkpoint: SyncCheckpoint,
-    },
-    SyncCheckpointAllAccessKeyChanges {
+    Variant2 {
         account_ids: ::std::vec::Vec<AccountId>,
         changes_type: ::std::string::String,
         sync_checkpoint: SyncCheckpoint,
     },
-    SyncCheckpointAllGasKeyChanges {
+    Variant3 {
         account_ids: ::std::vec::Vec<AccountId>,
         changes_type: ::std::string::String,
         sync_checkpoint: SyncCheckpoint,
     },
-    SyncCheckpointContractCodeChanges {
-        account_ids: ::std::vec::Vec<AccountId>,
-        changes_type: ::std::string::String,
-        sync_checkpoint: SyncCheckpoint,
-    },
-    SyncCheckpointDataChanges {
+    Variant4 {
         account_ids: ::std::vec::Vec<AccountId>,
         changes_type: ::std::string::String,
         key_prefix_base64: StoreKey,
@@ -15567,7 +16559,7 @@ impl ::std::default::Default for RpcValidatorsOrderedRequest {
 ///      ]
 ///    },
 ///    "storage_amount_per_byte": {
-///      "description": "Amount of yN per byte required to have on the account.  See\n<https://nomicon.io/Economics/Economic#state-stake> for details.",
+///      "description": "Amount of yN per byte required to have on the account.  See\n<https://nomicon.io/Economics/Economics.html#state-stake> for details.",
 ///      "allOf": [
 ///        {
 ///          "$ref": "#/definitions/NearToken"
@@ -15609,7 +16601,7 @@ pub struct RuntimeConfigView {
     ///The configuration for congestion control.
     pub congestion_control_config: CongestionControlConfigView,
     /**Amount of yN per byte required to have on the account.  See
-<https://nomicon.io/Economics/Economic#state-stake> for details.*/
+<https://nomicon.io/Economics/Economics.html#state-stake> for details.*/
     pub storage_amount_per_byte: NearToken,
     /**Costs of different actions that need to be performed when sending and
 processing transaction and receipts.*/
@@ -15828,6 +16820,19 @@ functionalities of ShardLayout interface.*/
 ///        }
 ///      },
 ///      "additionalProperties": false
+///    },
+///    {
+///      "title": "V3",
+///      "type": "object",
+///      "required": [
+///        "V3"
+///      ],
+///      "properties": {
+///        "V3": {
+///          "$ref": "#/definitions/ShardLayoutV3"
+///        }
+///      },
+///      "additionalProperties": false
 ///    }
 ///  ]
 ///}
@@ -15838,6 +16843,7 @@ pub enum ShardLayout {
     V0(ShardLayoutV0),
     V1(ShardLayoutV1),
     V2(ShardLayoutV2),
+    V3(ShardLayoutV3),
 }
 impl ::std::convert::From<ShardLayoutV0> for ShardLayout {
     fn from(value: ShardLayoutV0) -> Self {
@@ -15852,6 +16858,11 @@ impl ::std::convert::From<ShardLayoutV1> for ShardLayout {
 impl ::std::convert::From<ShardLayoutV2> for ShardLayout {
     fn from(value: ShardLayoutV2) -> Self {
         Self::V2(value)
+    }
+}
+impl ::std::convert::From<ShardLayoutV3> for ShardLayout {
+    fn from(value: ShardLayoutV3) -> Self {
+        Self::V3(value)
     }
 }
 /**A shard layout that maps accounts evenly across all shards -- by calculate the hash of account
@@ -16059,6 +17070,71 @@ pub struct ShardLayoutV2 {
     >,
     pub version: u32,
 }
+/**Counterpart to `ShardLayoutV3` composed of maps with string keys to aid
+serde serialization.*/
+///
+/// <details><summary>JSON schema</summary>
+///
+/// ```json
+///{
+///  "title": "ShardLayoutV3",
+///  "description": "Counterpart to `ShardLayoutV3` composed of maps with string keys to aid\nserde serialization.",
+///  "type": "object",
+///  "required": [
+///    "boundary_accounts",
+///    "id_to_index_map",
+///    "last_split",
+///    "shard_ids",
+///    "shards_split_map"
+///  ],
+///  "properties": {
+///    "boundary_accounts": {
+///      "type": "array",
+///      "items": {
+///        "$ref": "#/definitions/AccountId"
+///      }
+///    },
+///    "id_to_index_map": {
+///      "type": "object",
+///      "additionalProperties": {
+///        "type": "integer",
+///        "format": "uint",
+///        "minimum": 0.0
+///      }
+///    },
+///    "last_split": {
+///      "$ref": "#/definitions/ShardId"
+///    },
+///    "shard_ids": {
+///      "type": "array",
+///      "items": {
+///        "$ref": "#/definitions/ShardId"
+///      }
+///    },
+///    "shards_split_map": {
+///      "type": "object",
+///      "additionalProperties": {
+///        "type": "array",
+///        "items": {
+///          "$ref": "#/definitions/ShardId"
+///        }
+///      }
+///    }
+///  }
+///}
+/// ```
+/// </details>
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug)]
+pub struct ShardLayoutV3 {
+    pub boundary_accounts: ::std::vec::Vec<AccountId>,
+    pub id_to_index_map: ::std::collections::HashMap<::std::string::String, u32>,
+    pub last_split: ShardId,
+    pub shard_ids: ::std::vec::Vec<ShardId>,
+    pub shards_split_map: ::std::collections::HashMap<
+        ::std::string::String,
+        ::std::vec::Vec<ShardId>,
+    >,
+}
 /**`ShardUId` is a unique representation for shards from different shard layouts.
 
 Comparing to `ShardId`, which is just an ordinal number ranging from 0 to NUM_SHARDS-1,
@@ -16263,7 +17339,17 @@ impl ::std::fmt::Display for SignedTransaction {
 ///      "format": "uint64",
 ///      "minimum": 0.0
 ///    },
+///    "nonce_index": {
+///      "type": [
+///        "integer",
+///        "null"
+///      ],
+///      "format": "uint16",
+///      "maximum": 65535.0,
+///      "minimum": 0.0
+///    },
 ///    "priority_fee": {
+///      "description": "Deprecated, retained for backward compatibility.",
 ///      "default": 0,
 ///      "type": "integer",
 ///      "format": "uint64",
@@ -16290,6 +17376,9 @@ pub struct SignedTransactionView {
     pub actions: ::std::vec::Vec<ActionView>,
     pub hash: CryptoHash,
     pub nonce: u64,
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub nonce_index: ::std::option::Option<u16>,
+    ///Deprecated, retained for backward compatibility.
     #[serde(default)]
     pub priority_fee: u64,
     pub public_key: PublicKey,
@@ -16857,43 +17946,6 @@ pub enum StateChangeKindView {
 ///      }
 ///    },
 ///    {
-///      "title": "GasKeyUpdate",
-///      "type": "object",
-///      "required": [
-///        "cause",
-///        "change",
-///        "type"
-///      ],
-///      "properties": {
-///        "cause": {
-///          "$ref": "#/definitions/StateChangeCauseView"
-///        },
-///        "change": {
-///          "type": "object",
-///          "required": [
-///            "account_id",
-///            "gas_key",
-///            "public_key"
-///          ],
-///          "properties": {
-///            "account_id": {
-///              "$ref": "#/definitions/AccountId"
-///            },
-///            "gas_key": {
-///              "$ref": "#/definitions/GasKeyView"
-///            },
-///            "public_key": {
-///              "$ref": "#/definitions/PublicKey"
-///            }
-///          }
-///        },
-///        "type": {
-///          "type": "string",
-///          "const": "gas_key_update"
-///        }
-///      }
-///    },
-///    {
 ///      "title": "GasKeyNonceUpdate",
 ///      "type": "object",
 ///      "required": [
@@ -16919,7 +17971,8 @@ pub enum StateChangeKindView {
 ///            },
 ///            "index": {
 ///              "type": "integer",
-///              "format": "uint32",
+///              "format": "uint16",
+///              "maximum": 65535.0,
 ///              "minimum": 0.0
 ///            },
 ///            "nonce": {
@@ -16935,39 +17988,6 @@ pub enum StateChangeKindView {
 ///        "type": {
 ///          "type": "string",
 ///          "const": "gas_key_nonce_update"
-///        }
-///      }
-///    },
-///    {
-///      "title": "GasKeyDeletion",
-///      "type": "object",
-///      "required": [
-///        "cause",
-///        "change",
-///        "type"
-///      ],
-///      "properties": {
-///        "cause": {
-///          "$ref": "#/definitions/StateChangeCauseView"
-///        },
-///        "change": {
-///          "type": "object",
-///          "required": [
-///            "account_id",
-///            "public_key"
-///          ],
-///          "properties": {
-///            "account_id": {
-///              "$ref": "#/definitions/AccountId"
-///            },
-///            "public_key": {
-///              "$ref": "#/definitions/PublicKey"
-///            }
-///          }
-///        },
-///        "type": {
-///          "type": "string",
-///          "const": "gas_key_deletion"
 ///        }
 ///      }
 ///    },
@@ -17134,18 +18154,9 @@ pub enum StateChangeWithCauseView {
         cause: StateChangeCauseView,
         change: StateChangeWithCauseViewChange,
     },
-    ///GasKeyUpdate
-    #[serde(rename = "gas_key_update")]
-    GasKeyUpdate { cause: StateChangeCauseView, change: StateChangeWithCauseViewChange },
     ///GasKeyNonceUpdate
     #[serde(rename = "gas_key_nonce_update")]
     GasKeyNonceUpdate {
-        cause: StateChangeCauseView,
-        change: StateChangeWithCauseViewChange,
-    },
-    ///GasKeyDeletion
-    #[serde(rename = "gas_key_deletion")]
-    GasKeyDeletion {
         cause: StateChangeCauseView,
         change: StateChangeWithCauseViewChange,
     },
@@ -17246,6 +18257,141 @@ pub struct StateChangeWithCauseViewChange {
     #[serde(default)]
     pub storage_paid_at: u64,
     pub storage_usage: u64,
+}
+///`StateChangesRequestView`
+///
+/// <details><summary>JSON schema</summary>
+///
+/// ```json
+///{
+///  "title": "StateChangesRequestView",
+///  "oneOf": [
+///    {
+///      "title": "AccountChanges",
+///      "type": "object",
+///      "required": [
+///        "account_ids",
+///        "changes_type"
+///      ],
+///      "properties": {
+///        "account_ids": {
+///          "type": "array",
+///          "items": {
+///            "$ref": "#/definitions/AccountId"
+///          }
+///        },
+///        "changes_type": {
+///          "type": "string",
+///          "const": "account_changes"
+///        }
+///      }
+///    },
+///    {
+///      "title": "SingleAccessKeyChanges",
+///      "type": "object",
+///      "required": [
+///        "changes_type",
+///        "keys"
+///      ],
+///      "properties": {
+///        "changes_type": {
+///          "type": "string",
+///          "const": "single_access_key_changes"
+///        },
+///        "keys": {
+///          "type": "array",
+///          "items": {
+///            "$ref": "#/definitions/AccountWithPublicKey"
+///          }
+///        }
+///      }
+///    },
+///    {
+///      "title": "AllAccessKeyChanges",
+///      "type": "object",
+///      "required": [
+///        "account_ids",
+///        "changes_type"
+///      ],
+///      "properties": {
+///        "account_ids": {
+///          "type": "array",
+///          "items": {
+///            "$ref": "#/definitions/AccountId"
+///          }
+///        },
+///        "changes_type": {
+///          "type": "string",
+///          "const": "all_access_key_changes"
+///        }
+///      }
+///    },
+///    {
+///      "title": "ContractCodeChanges",
+///      "type": "object",
+///      "required": [
+///        "account_ids",
+///        "changes_type"
+///      ],
+///      "properties": {
+///        "account_ids": {
+///          "type": "array",
+///          "items": {
+///            "$ref": "#/definitions/AccountId"
+///          }
+///        },
+///        "changes_type": {
+///          "type": "string",
+///          "const": "contract_code_changes"
+///        }
+///      }
+///    },
+///    {
+///      "title": "DataChanges",
+///      "type": "object",
+///      "required": [
+///        "account_ids",
+///        "changes_type",
+///        "key_prefix_base64"
+///      ],
+///      "properties": {
+///        "account_ids": {
+///          "type": "array",
+///          "items": {
+///            "$ref": "#/definitions/AccountId"
+///          }
+///        },
+///        "changes_type": {
+///          "type": "string",
+///          "const": "data_changes"
+///        },
+///        "key_prefix_base64": {
+///          "$ref": "#/definitions/StoreKey"
+///        }
+///      }
+///    }
+///  ]
+///}
+/// ```
+/// </details>
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug)]
+#[serde(tag = "changes_type")]
+pub enum StateChangesRequestView {
+    ///AccountChanges
+    #[serde(rename = "account_changes")]
+    AccountChanges { account_ids: ::std::vec::Vec<AccountId> },
+    ///SingleAccessKeyChanges
+    #[serde(rename = "single_access_key_changes")]
+    SingleAccessKeyChanges { keys: ::std::vec::Vec<AccountWithPublicKey> },
+    ///AllAccessKeyChanges
+    #[serde(rename = "all_access_key_changes")]
+    AllAccessKeyChanges { account_ids: ::std::vec::Vec<AccountId> },
+    ///ContractCodeChanges
+    #[serde(rename = "contract_code_changes")]
+    ContractCodeChanges { account_ids: ::std::vec::Vec<AccountId> },
+    ///DataChanges
+    #[serde(rename = "data_changes")]
+    DataChanges { account_ids: ::std::vec::Vec<AccountId>, key_prefix_base64: StoreKey },
 }
 ///Item of the state, key and value are serialized in base64 and proof for inclusion of given state item.
 ///
@@ -18132,6 +19278,47 @@ impl ::std::convert::From<::std::vec::Vec<AccountId>> for TrackedShardsConfig {
 pub struct TransferAction {
     pub deposit: NearToken,
 }
+///Transfer NEAR to a gas key's balance
+///
+/// <details><summary>JSON schema</summary>
+///
+/// ```json
+///{
+///  "title": "TransferToGasKeyAction",
+///  "description": "Transfer NEAR to a gas key's balance",
+///  "type": "object",
+///  "required": [
+///    "deposit",
+///    "public_key"
+///  ],
+///  "properties": {
+///    "deposit": {
+///      "description": "Amount of NEAR to transfer to the gas key",
+///      "allOf": [
+///        {
+///          "$ref": "#/definitions/NearToken"
+///        }
+///      ]
+///    },
+///    "public_key": {
+///      "description": "The public key of the gas key to fund",
+///      "allOf": [
+///        {
+///          "$ref": "#/definitions/PublicKey"
+///        }
+///      ]
+///    }
+///  }
+///}
+/// ```
+/// </details>
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug)]
+pub struct TransferToGasKeyAction {
+    ///Amount of NEAR to transfer to the gas key
+    pub deposit: NearToken,
+    ///The public key of the gas key to fund
+    pub public_key: PublicKey,
+}
 ///Error returned in the ExecutionOutcome in case of failure
 ///
 /// <details><summary>JSON schema</summary>
@@ -18786,7 +19973,6 @@ pub struct ViewStateResult {
 ///    "linear_op_unit_cost",
 ///    "reftypes_bulk_memory",
 ///    "regular_op_cost",
-///    "saturating_float_to_int",
 ///    "storage_get_mode",
 ///    "vm_kind"
 ///  ],
@@ -18826,7 +20012,7 @@ pub struct ViewStateResult {
 ///      "minimum": 0.0
 ///    },
 ///    "implicit_account_creation": {
-///      "description": "See [VMConfig::implicit_account_creation](crate::vm::Config::implicit_account_creation).",
+///      "description": "Deprecated",
 ///      "type": "boolean"
 ///    },
 ///    "limit_config": {
@@ -18858,10 +20044,6 @@ pub struct ViewStateResult {
 ///      "type": "integer",
 ///      "format": "uint32",
 ///      "minimum": 0.0
-///    },
-///    "saturating_float_to_int": {
-///      "description": "See [VMConfig::saturating_float_to_int](crate::vm::Config::saturating_float_to_int).",
-///      "type": "boolean"
 ///    },
 ///    "storage_get_mode": {
 ///      "description": "See [VMConfig::storage_get_mode](crate::vm::Config::storage_get_mode).",
@@ -18899,7 +20081,7 @@ pub struct VmConfigView {
     pub global_contract_host_fns: bool,
     ///Gas cost of a growing memory by single page.
     pub grow_mem_cost: u32,
-    ///See [VMConfig::implicit_account_creation](crate::vm::Config::implicit_account_creation).
+    ///Deprecated
     pub implicit_account_creation: bool,
     /**Describes limits for VM and Runtime.
 
@@ -18914,8 +20096,6 @@ on runtime.*/
     pub reftypes_bulk_memory: bool,
     ///Gas cost of a regular operation.
     pub regular_op_cost: u32,
-    ///See [VMConfig::saturating_float_to_int](crate::vm::Config::saturating_float_to_int).
-    pub saturating_float_to_int: bool,
     ///See [VMConfig::storage_get_mode](crate::vm::Config::storage_get_mode).
     pub storage_get_mode: StorageGetMode,
     ///See [VMConfig::vm_kind](crate::vm::Config::vm_kind).
@@ -19173,6 +20353,47 @@ impl ::std::convert::TryFrom<::std::string::String> for WasmTrap {
     ) -> ::std::result::Result<Self, self::error::ConversionError> {
         value.parse()
     }
+}
+///Withdraw NEAR from a gas key's balance to the account
+///
+/// <details><summary>JSON schema</summary>
+///
+/// ```json
+///{
+///  "title": "WithdrawFromGasKeyAction",
+///  "description": "Withdraw NEAR from a gas key's balance to the account",
+///  "type": "object",
+///  "required": [
+///    "amount",
+///    "public_key"
+///  ],
+///  "properties": {
+///    "amount": {
+///      "description": "Amount of NEAR to transfer from the gas key",
+///      "allOf": [
+///        {
+///          "$ref": "#/definitions/NearToken"
+///        }
+///      ]
+///    },
+///    "public_key": {
+///      "description": "The public key of the gas key to withdraw from",
+///      "allOf": [
+///        {
+///          "$ref": "#/definitions/PublicKey"
+///        }
+///      ]
+///    }
+///  }
+///}
+/// ```
+/// </details>
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug)]
+pub struct WithdrawFromGasKeyAction {
+    ///Amount of NEAR to transfer from the gas key
+    pub amount: NearToken,
+    ///The public key of the gas key to withdraw from
+    pub public_key: PublicKey,
 }
 ///Configuration specific to ChunkStateWitness.
 ///

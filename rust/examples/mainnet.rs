@@ -2,7 +2,7 @@
 //!
 //! Run with: cargo run --example mainnet
 
-use near_rpc_client::{client::Result, NearRpcClient, types::*};
+use near_rpc_client::{client::Result, types::*, NearRpcClient};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -15,8 +15,14 @@ async fn main() -> Result<()> {
     let status = client.status().await?;
     println!("   Chain ID: {}", status.chain_id);
     println!("   Protocol version: {}", status.protocol_version);
-    println!("   Latest block height: {}", status.sync_info.latest_block_height);
-    println!("   Latest block hash: {}", status.sync_info.latest_block_hash);
+    println!(
+        "   Latest block height: {}",
+        status.sync_info.latest_block_height
+    );
+    println!(
+        "   Latest block hash: {}",
+        status.sync_info.latest_block_hash
+    );
     println!("   Syncing: {}", status.sync_info.syncing);
     println!();
 
@@ -49,8 +55,13 @@ async fn main() -> Result<()> {
             request_type: "view_account".to_string(),
         })
         .await?;
-    
-    if let RpcQueryResponse::AccountView { amount, storage_usage, .. } = account_query {
+
+    if let RpcQueryResponse::AccountView {
+        amount,
+        storage_usage,
+        ..
+    } = account_query
+    {
         // amount is NearToken (u128 as string)
         let balance_str: String = amount.into();
         let balance_yocto: u128 = balance_str.parse().unwrap_or(0);
@@ -81,13 +92,17 @@ async fn main() -> Result<()> {
 
     // 6. Get validators (using Latest variant)
     println!("6. Fetching current validators...");
-    let validators = client
-        .validators(RpcValidatorRequest::Latest)
-        .await?;
-    println!("   Current validators: {}", validators.current_validators.len());
+    let validators = client.validators(RpcValidatorRequest::Latest).await?;
+    println!(
+        "   Current validators: {}",
+        validators.current_validators.len()
+    );
     println!("   Next validators: {}", validators.next_validators.len());
     if let Some(first) = validators.current_validators.first() {
-        println!("   Top validator: {} (stake: {})", first.account_id, first.stake);
+        println!(
+            "   Top validator: {} (stake: {})",
+            first.account_id, first.stake
+        );
     }
     println!();
 

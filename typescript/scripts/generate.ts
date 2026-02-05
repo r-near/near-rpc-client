@@ -1,96 +1,153 @@
 /**
- * Generate Zod schemas from OpenRPC specification
+ * Generate Zod schemas from OpenRPC specification using openapi-zod-client
+ * 
+ * This produces much cleaner output than json-schema-to-zod:
+ * - Uses z.union() instead of superRefine for oneOf
+ * - Produces intersection types (.and()) for allOf
+ * - Much smaller output (2300 lines vs 13000+)
  * 
  * Usage: bun run scripts/generate.ts
  */
 
-import { jsonSchemaToZod } from "json-schema-to-zod";
+import { generateZodClientFromOpenAPI } from "openapi-zod-client";
 import * as fs from "fs";
 import * as path from "path";
 
-const openrpcPath = path.join(import.meta.dir, "../../shared/openrpc.json");
+const __dirname = import.meta.dir;
+
+// Read the OpenRPC spec - use the shared version (already collapsed by Rust)
+const openrpcPath = path.join(__dirname, "../../shared/openrpc.json");
 const openrpc = JSON.parse(fs.readFileSync(openrpcPath, "utf-8"));
 
-const schemas = openrpc.components?.schemas || {};
-
-// Build definitions map for $ref resolution
-const definitions: Record<string, unknown> = {};
-for (const [name, schema] of Object.entries(schemas)) {
-  definitions[name] = schema;
-}
-
-/**
- * Recursively resolve $ref pointers in JSON Schema.
- * Uses cycle detection to prevent infinite recursion.
- */
-function resolveRefs(obj: unknown, seen = new Set<string>(), depth = 0): unknown {
-  if (depth > 20) return {};
-  if (obj === null || typeof obj !== "object") return obj;
-  if (Array.isArray(obj)) return obj.map((item) => resolveRefs(item, seen, depth));
-
-  const record = obj as Record<string, unknown>;
-
-  // Handle $ref
-  if (record.$ref && typeof record.$ref === "string") {
-    const refPath = record.$ref.replace("#/components/schemas/", "");
-
-    // Cycle detection
-    if (seen.has(refPath)) {
-      return { $lazyRef: refPath };
-    }
-
-    const referenced = definitions[refPath];
-    if (referenced) {
-      const newSeen = new Set(seen);
-      newSeen.add(refPath);
-      return resolveRefs(referenced, newSeen, depth + 1);
-    }
-    return {};
+// Preprocess schemas to convert `const` to single-value `enum`
+// and add `additionalProperties: false` to avoid `.passthrough()` which creates ugly types
+function preprocessSchema(schema: any): any {
+  if (schema === null || typeof schema !== "object") {
+    return schema;
   }
 
-  const result: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(record)) {
-    result[key] = resolveRefs(value, seen, depth);
+  if (Array.isArray(schema)) {
+    return schema.map(preprocessSchema);
   }
+
+  const result: any = {};
+  for (const [key, value] of Object.entries(schema)) {
+    if (key === "const") {
+      // Convert const to single-value enum
+      result["enum"] = [value];
+    } else {
+      result[key] = preprocessSchema(value);
+    }
+  }
+  
+  // Add additionalProperties: false to object types to avoid .passthrough()
+  if (result.type === "object" && result.properties && !("additionalProperties" in result)) {
+    result.additionalProperties = false;
+  }
+  
   return result;
 }
 
-const schemaNames = Object.keys(definitions);
+const processedSchemas = preprocessSchema(openrpc.components.schemas);
 
-let output = `// Auto-generated from OpenRPC schema - DO NOT EDIT
-import { z } from "zod";
+// Convert OpenRPC to a minimal OpenAPI structure
+// openapi-zod-client only needs components.schemas, which is identical
+const fakeOpenApi = {
+  openapi: "3.0.0",
+  info: openrpc.info,
+  paths: {}, // Empty - we just want schemas
+  components: {
+    schemas: processedSchemas,
+  },
+};
 
+/**
+ * Post-process the generated output to:
+ * 1. Add type aliases for cleaner hover types
+ * 2. Remove .passthrough() which causes ugly z.objectOutputType in hovers
+ */
+function postProcessOutput(content: string, schemaNames: string[]): string {
+  // Remove .passthrough() - it causes ugly hover types (see https://github.com/colinhacks/zod/issues/2938)
+  // For objects with additionalProperties: false, we don't need passthrough anyway
+  content = content.replace(/\.passthrough\(\)/g, "");
+  
+  // Find the schemas export object
+  const exportMatch = content.match(/export const schemas = \{[\s\S]*?\n\};/);
+  if (!exportMatch) {
+    console.warn("Could not find schemas export, skipping type aliases");
+    return content;
+  }
+
+  // Add a Simplify utility type that forces TypeScript to expand types for cleaner hover display
+  const simplifyUtil = `
+// Utility type to force TypeScript to expand types for cleaner hover display
+type Simplify<T> = { [K in keyof T]: T[K] } & {};
 `;
 
-// Generate each schema
-for (const name of schemaNames) {
-  const schema = definitions[name];
-  const resolved = resolveRefs(schema, new Set([name]));
+  // Generate type aliases using Simplify for each schema
+  const typeAliases = schemaNames
+    .map((name) => `export type ${name} = Simplify<z.infer<typeof ${name}>>;`)
+    .join("\n");
 
-  // Replace lazy refs with empty object (recursive types become z.any())
-  const cleanedStr = JSON.stringify(resolved).replace(
-    /\{"\$lazyRef":"[^"]+"\}/g,
-    "{}"
+  // Insert after the import statement
+  const importEnd = content.indexOf('import { z } from "zod";') + 'import { z } from "zod";'.length;
+  const before = content.slice(0, importEnd);
+  const middle = content.slice(importEnd, exportMatch.index!);
+  const after = content.slice(exportMatch.index!);
+  
+  // Replace "export const schemas = {" with an explicit Record type annotation
+  // This prevents TS7056 error about type too long to serialize
+  const fixedAfter = after.replace(
+    'export const schemas = {',
+    'export const schemas: Record<string, z.ZodTypeAny> = {'
   );
-  const cleaned = JSON.parse(cleanedStr);
 
+  return before + simplifyUtil + middle + "\n// Inferred types for cleaner IDE hover\n" + typeAliases + "\n\n" + fixedAfter;
+}
+
+async function main() {
+  const templatePath = path.join(
+    __dirname,
+    "../node_modules/openapi-zod-client/dist/templates/schemas-only.hbs"
+  );
+  
+  // Check if template exists, try alternate path
+  const altTemplatePath = path.join(
+    __dirname,
+    "../node_modules/openapi-zod-client/src/templates/schemas-only.hbs"
+  );
+  
+  const finalTemplatePath = fs.existsSync(templatePath) ? templatePath : altTemplatePath;
+  
   try {
-    const zodCode = jsonSchemaToZod(cleaned, {
-      name: name,
-      module: "esm",
-      type: true,
-      noImport: true,
+    await generateZodClientFromOpenAPI({
+      openApiDoc: fakeOpenApi as any,
+      distPath: path.join(__dirname, "../src/schemas.ts"),
+      templatePath: finalTemplatePath,
+      options: {
+        shouldExportAllSchemas: true,
+        withDescription: false,
+        withDefaultValues: false,
+      },
     });
 
-    output += zodCode + "\n\n";
+    // Post-process to add type aliases and remove passthrough
+    const outputPath = path.join(__dirname, "../src/schemas.ts");
+    let content = fs.readFileSync(outputPath, "utf-8");
+
+    // Extract schema names from the export
+    const schemaNames = Object.keys(processedSchemas);
+    content = postProcessOutput(content, schemaNames);
+
+    fs.writeFileSync(outputPath, content);
+
+    console.log(`Input: ${openrpcPath}`);
+    console.log(`Output: ${outputPath}`);
+    console.log(`Generated ${schemaNames.length} schemas with type aliases`);
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error(`Failed to generate ${name}: ${message}`);
-    output += `export const ${name} = z.unknown();\n`;
-    output += `export type ${name} = z.infer<typeof ${name}>;\n\n`;
+    console.error("Error:", err);
+    process.exit(1);
   }
 }
 
-const outPath = path.join(import.meta.dir, "../src/schemas.ts");
-fs.writeFileSync(outPath, output);
-console.log(`Generated ${schemaNames.length} schemas to ${outPath}`);
+main();
