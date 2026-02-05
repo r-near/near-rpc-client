@@ -1,0 +1,16 @@
+# Rust
+/target
+Cargo.lock
+
+# TypeScript
+node_modules/
+dist/
+*.tsbuildinfo
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store

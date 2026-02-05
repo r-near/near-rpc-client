@@ -1,0 +1,40 @@
+{
+  "name": "@near/rpc-client",
+  "version": "0.1.0",
+  "description": "TypeScript client for NEAR Protocol JSON-RPC API with Zod validation",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./schemas": {
+      "import": "./dist/schemas.js",
+      "types": "./dist/schemas.d.ts"
+    }
+  },
+  "scripts": {
+    "generate": "bun run scripts/generate.ts",
+    "build": "bun run generate && tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "bun run examples/mainnet.ts"
+  },
+  "dependencies": {
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.2.0",
+    "json-schema-to-zod": "^2.7.0",
+    "typescript": "^5.8.0"
+  },
+  "files": [
+    "dist"
+  ],
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/near/near-rpc-client"
+  }
+}
