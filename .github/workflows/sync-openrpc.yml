@@ -1,0 +1,46 @@
+name: Sync OpenRPC spec from nearcore
+
+on:
+  schedule:
+    # Run daily at 06:00 UTC
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch latest openrpc.json from nearcore
+        run: |
+          curl -sSfL \
+            "https://raw.githubusercontent.com/near/nearcore/master/chain/jsonrpc/openapi/openrpc.json" \
+            -o shared/openrpc.json
+
+      - name: Check for changes
+        id: diff
+        run: |
+          if git diff --quiet shared/openrpc.json; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create Pull Request
+        if: steps.diff.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: chore/sync-openrpc-spec
+          commit-message: "chore: sync openrpc.json from nearcore master"
+          title: "chore: sync openrpc.json from nearcore master"
+          body: |
+            Auto-generated PR to update `shared/openrpc.json` from
+            [nearcore master](https://github.com/near/nearcore/blob/master/chain/jsonrpc/openapi/openrpc.json).
+
+            Please review the schema diff and verify that the generated Rust and TypeScript clients still build correctly.
+          labels: automated
