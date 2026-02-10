@@ -49,7 +49,7 @@ async fn main() -> Result<()> {
     // 4. Query account - using cartesian product variant
     println!("4. Querying 'near' foundation account...");
     let account_query = client
-        .query(RpcQueryRequest::FinalityViewAccount {
+        .query(RpcQueryRequest::ViewAccountFinality {
             finality: Finality::Final,
             account_id: "near".parse().expect("valid account id"),
             request_type: "view_account".to_string(),
@@ -75,7 +75,7 @@ async fn main() -> Result<()> {
     // 5. Call a view function on a contract
     println!("5. Calling view function on wrap.near...");
     let call_result = client
-        .query(RpcQueryRequest::FinalityCallFunction {
+        .query(RpcQueryRequest::CallFunctionFinality {
             finality: Finality::Final,
             account_id: "wrap.near".parse().expect("valid account id"),
             method_name: "ft_metadata".to_string(),
