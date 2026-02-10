@@ -31,16 +31,43 @@ jobs:
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Install Rust toolchain
+        if: steps.diff.outputs.changed == 'true'
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Regenerate Rust client
+        if: steps.diff.outputs.changed == 'true'
+        working-directory: rust
+        run: |
+          cargo build
+
+      - name: Setup Bun
+        if: steps.diff.outputs.changed == 'true'
+        uses: oven-sh/setup-bun@v2
+
+      - name: Regenerate TypeScript client
+        if: steps.diff.outputs.changed == 'true'
+        working-directory: typescript
+        run: |
+          bun install
+          bun run generate
+
       - name: Create Pull Request
         if: steps.diff.outputs.changed == 'true'
         uses: peter-evans/create-pull-request@v7
         with:
           branch: chore/sync-openrpc-spec
-          commit-message: "chore: sync openrpc.json from nearcore master"
-          title: "chore: sync openrpc.json from nearcore master"
+          commit-message: "chore: sync openrpc.json and regenerate clients"
+          title: "chore: sync openrpc.json and regenerate clients"
           body: |
             Auto-generated PR to update `shared/openrpc.json` from
-            [nearcore master](https://github.com/near/nearcore/blob/master/chain/jsonrpc/openapi/openrpc.json).
+            [nearcore master](https://github.com/near/nearcore/blob/master/chain/jsonrpc/openapi/openrpc.json)
+            and regenerate Rust and TypeScript clients.
 
-            Please review the schema diff and verify that the generated Rust and TypeScript clients still build correctly.
+            **Changes include:**
+            - Updated `shared/openrpc.json`
+            - Regenerated `rust/src/generated.rs`
+            - Regenerated `typescript/src/schemas.ts` and `typescript/src/methods.ts`
+
+            Please review the diff and verify correctness.
           labels: automated
