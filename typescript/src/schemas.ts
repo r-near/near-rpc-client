@@ -481,6 +481,13 @@ const ActionErrorKind = z.union([
       required: NearToken,
     }),
   }),
+  z.object({
+    GasKeyBalanceTooHigh: z.object({
+      account_id: AccountId,
+      balance: NearToken,
+      public_key: z.union([PublicKey, z.null()]).optional(),
+    }),
+  }),
 ]);
 const ActionError = z.object({
   index: z.union([z.number(), z.null()]).optional(),
@@ -795,6 +802,10 @@ const DataReceiverView = z.object({
   data_id: CryptoHash,
   receiver_id: AccountId,
 });
+const DepositCostFailureReason = z.enum([
+  "NotEnoughBalance",
+  "LackBalanceForState",
+]);
 const PeerInfoView = z.object({
   account_id: z.union([AccountId, z.null()]).optional(),
   addr: z.string(),
@@ -848,7 +859,7 @@ const DumpConfig = z.object({
 });
 const EpochId = CryptoHash;
 const EpochSyncConfig = z.object({
-  epoch_sync_horizon: z.number().int().gte(0),
+  epoch_sync_horizon_num_epochs: z.number().int().gte(0).optional(),
   timeout_for_epoch_sync: DurationAsStdSchemaProvider,
 });
 const ExecutionMetadataView = z.object({
@@ -935,6 +946,14 @@ const InvalidTxError = z.union([
     NotEnoughGasKeyBalance: z.object({
       balance: NearToken,
       cost: NearToken,
+      signer_id: AccountId,
+    }),
+  }),
+  z.object({
+    NotEnoughBalanceForDeposit: z.object({
+      balance: NearToken,
+      cost: NearToken,
+      reason: DepositCostFailureReason,
       signer_id: AccountId,
     }),
   }),
@@ -1113,6 +1132,7 @@ const ReceiptEnumView = z.union([
       already_delivered_shards: z.array(ShardId),
       code: z.string(),
       id: GlobalContractIdentifier,
+      nonce: z.union([z.number(), z.null()]).optional(),
       target_shard: ShardId.int().gte(0),
     }),
   }),
@@ -1966,6 +1986,7 @@ export type DeleteAccountAction = Simplify<z.infer<typeof DeleteAccountAction>>;
 export type DeleteKeyAction = Simplify<z.infer<typeof DeleteKeyAction>>;
 export type DeployContractAction = Simplify<z.infer<typeof DeployContractAction>>;
 export type DeployGlobalContractAction = Simplify<z.infer<typeof DeployGlobalContractAction>>;
+export type DepositCostFailureReason = Simplify<z.infer<typeof DepositCostFailureReason>>;
 export type DetailedDebugStatus = Simplify<z.infer<typeof DetailedDebugStatus>>;
 export type DeterministicAccountStateInit = Simplify<z.infer<typeof DeterministicAccountStateInit>>;
 export type DeterministicAccountStateInitV1 = Simplify<z.infer<typeof DeterministicAccountStateInitV1>>;
@@ -2207,6 +2228,7 @@ export const schemas: Record<string, z.ZodTypeAny> = {
   CurrentEpochValidatorInfo,
   DataReceiptCreationConfigView,
   DataReceiverView,
+  DepositCostFailureReason,
   PeerInfoView,
   KnownProducerView,
   NetworkInfoView,

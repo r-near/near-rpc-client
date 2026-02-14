@@ -421,6 +421,14 @@ TODO(#8598): This error is named very poorly. A better name would be
         public_key: PublicKey,
         required: NearToken,
     },
+    ///Gas key balance is too high to burn during deletion
+    GasKeyBalanceTooHigh {
+        account_id: AccountId,
+        balance: NearToken,
+        ///Set for DeleteKey (specific key), None for DeleteAccount (aggregate)
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        public_key: ::std::option::Option<PublicKey>,
+    },
 }
 impl ::std::convert::From<FunctionCallError> for ActionErrorKind {
     fn from(value: FunctionCallError) -> Self {
@@ -1151,6 +1159,69 @@ pub struct DeployGlobalContractAction {
     pub code: ::std::string::String,
     pub deploy_mode: GlobalContractDeployMode,
 }
+/**Reason why a gas key transaction failed at the deposit/account level.
+In these cases, gas is still charged from the gas key.*/
+///
+#[derive(
+    ::serde::Deserialize,
+    ::serde::Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd
+)]
+pub enum DepositCostFailureReason {
+    NotEnoughBalance,
+    LackBalanceForState,
+}
+impl ::std::fmt::Display for DepositCostFailureReason {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::NotEnoughBalance => f.write_str("NotEnoughBalance"),
+            Self::LackBalanceForState => f.write_str("LackBalanceForState"),
+        }
+    }
+}
+impl ::std::str::FromStr for DepositCostFailureReason {
+    type Err = self::error::ConversionError;
+    fn from_str(
+        value: &str,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "NotEnoughBalance" => Ok(Self::NotEnoughBalance),
+            "LackBalanceForState" => Ok(Self::LackBalanceForState),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for DepositCostFailureReason {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: &str,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<&::std::string::String> for DepositCostFailureReason {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: &::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for DepositCostFailureReason {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
 ///`DetailedDebugStatus`
 ///
 #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug)]
@@ -1325,11 +1396,12 @@ impl ::std::fmt::Display for EpochId {
 ///
 #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug)]
 pub struct EpochSyncConfig {
-    /**This serves as two purposes: (1) the node will not epoch sync and instead resort to
-header sync, if the genesis block is within this many blocks from the current block;
-(2) the node will reject an epoch sync proof if the provided proof is for an epoch
-that is more than this many blocks behind the current block.*/
-    pub epoch_sync_horizon: u64,
+    /**Number of epochs behind the network head beyond which the node will use
+epoch sync instead of header sync. Also the maximum age (in epochs) of
+accepted epoch sync proofs. At the consumption site, this is multiplied
+by epoch_length to get the horizon in blocks.*/
+    #[serde(default = "defaults::default_u64::<u64, 4>")]
+    pub epoch_sync_horizon_num_epochs: u64,
     /**Timeout for epoch sync requests. The node will continue retrying indefinitely even
 if this timeout is exceeded.*/
     pub timeout_for_epoch_sync: DurationAsStdSchemaProvider,
@@ -2300,6 +2372,14 @@ must have a nonce_index in valid range, regular transactions must not.*/
     },
     ///Gas key does not have enough balance to cover gas costs.
     NotEnoughGasKeyBalance { balance: NearToken, cost: NearToken, signer_id: AccountId },
+    /**Gas key transaction failed because the account could not cover the deposit cost.
+Gas is still charged from the gas key in this case.*/
+    NotEnoughBalanceForDeposit {
+        balance: NearToken,
+        cost: NearToken,
+        reason: DepositCostFailureReason,
+        signer_id: AccountId,
+    },
 }
 impl ::std::convert::From<InvalidAccessKeyError> for InvalidTxError {
     fn from(value: InvalidAccessKeyError) -> Self {
@@ -3214,6 +3294,8 @@ pub enum ReceiptEnumView {
         already_delivered_shards: ::std::vec::Vec<ShardId>,
         code: ::std::string::String,
         id: GlobalContractIdentifier,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        nonce: ::std::option::Option<u64>,
         target_shard: ShardId,
     },
 }
@@ -5759,7 +5841,10 @@ impl ::std::convert::TryFrom<::std::string::String> for WasmTrap {
         value.parse()
     }
 }
-///Withdraw NEAR from a gas key's balance to the account
+/**Withdraw NEAR from a gas key's balance to the account.
+
+This action must only be available via transactions, not via contract execution
+(there is no corresponding promise batch action host function).*/
 ///
 #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug)]
 pub struct WithdrawFromGasKeyAction {
