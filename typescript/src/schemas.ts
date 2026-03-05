@@ -481,6 +481,13 @@ const ActionErrorKind = z.union([
       required: NearToken,
     }),
   }),
+  z.object({
+    GasKeyBalanceTooHigh: z.object({
+      account_id: AccountId,
+      balance: NearToken,
+      public_key: z.union([PublicKey, z.null()]).optional(),
+    }),
+  }),
 ]);
 const ActionError = z.object({
   index: z.union([z.number(), z.null()]).optional(),
@@ -709,6 +716,11 @@ const CongestionInfoView = z.object({
   delayed_receipts_gas: z.string(),
   receipt_bytes: z.number().int().gte(0),
 });
+const TrieSplit = z.object({
+  boundary_account: AccountId,
+  left_memory: z.number().int().gte(0),
+  right_memory: z.number().int().gte(0),
+});
 const ShardId = z.number();
 const ChunkHeaderView = z.object({
   balance_burnt: NearToken,
@@ -725,6 +737,7 @@ const ChunkHeaderView = z.object({
   outgoing_receipts_root: CryptoHash,
   prev_block_hash: CryptoHash,
   prev_state_root: CryptoHash,
+  proposed_split: z.union([TrieSplit, z.null()]).optional(),
   rent_paid: NearToken.optional(),
   shard_id: ShardId.int().gte(0),
   signature: Signature,
@@ -795,6 +808,10 @@ const DataReceiverView = z.object({
   data_id: CryptoHash,
   receiver_id: AccountId,
 });
+const DepositCostFailureReason = z.enum([
+  "NotEnoughBalance",
+  "LackBalanceForState",
+]);
 const PeerInfoView = z.object({
   account_id: z.union([AccountId, z.null()]).optional(),
   addr: z.string(),
@@ -848,7 +865,7 @@ const DumpConfig = z.object({
 });
 const EpochId = CryptoHash;
 const EpochSyncConfig = z.object({
-  epoch_sync_horizon: z.number().int().gte(0),
+  epoch_sync_horizon_num_epochs: z.number().int().gte(0).optional(),
   timeout_for_epoch_sync: DurationAsStdSchemaProvider,
 });
 const ExecutionMetadataView = z.object({
@@ -935,6 +952,14 @@ const InvalidTxError = z.union([
     NotEnoughGasKeyBalance: z.object({
       balance: NearToken,
       cost: NearToken,
+      signer_id: AccountId,
+    }),
+  }),
+  z.object({
+    NotEnoughBalanceForDeposit: z.object({
+      balance: NearToken,
+      cost: NearToken,
+      reason: DepositCostFailureReason,
       signer_id: AccountId,
     }),
   }),
@@ -1113,6 +1138,7 @@ const ReceiptEnumView = z.union([
       already_delivered_shards: z.array(ShardId),
       code: z.string(),
       id: GlobalContractIdentifier,
+      nonce: z.union([z.number(), z.null()]).optional(),
       target_shard: ShardId.int().gte(0),
     }),
   }),
@@ -1139,6 +1165,7 @@ const GCConfig = z
     gc_step_period: DurationAsStdSchemaProvider,
   })
   .partial();
+const GasKeyNoncesView = z.object({ nonces: z.array(z.number().int().gte(0)) });
 const ShardLayoutV0 = z.object({
   num_shards: z.number().int().gte(0),
   version: z.number().int().gte(0),
@@ -1546,8 +1573,10 @@ const VMConfigView = z.object({
   deterministic_account_ids: z.boolean(),
   discard_custom_sections: z.boolean(),
   eth_implicit_accounts: z.boolean(),
+  eth_implicit_global_contract: z.boolean(),
   ext_costs: ExtCostsConfigView,
   fix_contract_loading_cost: z.boolean(),
+  gas_key_host_fns: z.boolean(),
   global_contract_host_fns: z.boolean(),
   grow_mem_cost: z.number().int().gte(0),
   implicit_account_creation: z.boolean(),
@@ -1635,7 +1664,7 @@ const RpcQueryResponse = z.union([
     .and(AccessKeyList),
   z
     .object({ block_hash: CryptoHash, block_height: z.number().int().gte(0) })
-    .and(z.array(z.number().int().gte(0))),
+    .and(GasKeyNoncesView),
 ]);
 const RpcReceiptRequest = z.object({ receipt_id: CryptoHash });
 const RpcReceiptResponse = z.object({
@@ -1966,6 +1995,7 @@ export type DeleteAccountAction = Simplify<z.infer<typeof DeleteAccountAction>>;
 export type DeleteKeyAction = Simplify<z.infer<typeof DeleteKeyAction>>;
 export type DeployContractAction = Simplify<z.infer<typeof DeployContractAction>>;
 export type DeployGlobalContractAction = Simplify<z.infer<typeof DeployGlobalContractAction>>;
+export type DepositCostFailureReason = Simplify<z.infer<typeof DepositCostFailureReason>>;
 export type DetailedDebugStatus = Simplify<z.infer<typeof DetailedDebugStatus>>;
 export type DeterministicAccountStateInit = Simplify<z.infer<typeof DeterministicAccountStateInit>>;
 export type DeterministicAccountStateInitV1 = Simplify<z.infer<typeof DeterministicAccountStateInitV1>>;
@@ -1993,6 +2023,7 @@ export type FunctionCallError = Simplify<z.infer<typeof FunctionCallError>>;
 export type FunctionCallPermission = Simplify<z.infer<typeof FunctionCallPermission>>;
 export type GCConfig = Simplify<z.infer<typeof GCConfig>>;
 export type GasKeyInfo = Simplify<z.infer<typeof GasKeyInfo>>;
+export type GasKeyNoncesView = Simplify<z.infer<typeof GasKeyNoncesView>>;
 export type GenesisConfig = Simplify<z.infer<typeof GenesisConfig>>;
 export type GenesisConfigRequest = Simplify<z.infer<typeof GenesisConfigRequest>>;
 export type GlobalContractDeployMode = Simplify<z.infer<typeof GlobalContractDeployMode>>;
@@ -2101,6 +2132,7 @@ export type Tier1ProxyView = Simplify<z.infer<typeof Tier1ProxyView>>;
 export type TrackedShardsConfig = Simplify<z.infer<typeof TrackedShardsConfig>>;
 export type TransferAction = Simplify<z.infer<typeof TransferAction>>;
 export type TransferToGasKeyAction = Simplify<z.infer<typeof TransferToGasKeyAction>>;
+export type TrieSplit = Simplify<z.infer<typeof TrieSplit>>;
 export type TxExecutionError = Simplify<z.infer<typeof TxExecutionError>>;
 export type TxExecutionStatus = Simplify<z.infer<typeof TxExecutionStatus>>;
 export type UseGlobalContractAction = Simplify<z.infer<typeof UseGlobalContractAction>>;
@@ -2197,6 +2229,7 @@ export const schemas: Record<string, z.ZodTypeAny> = {
   ChunkDistributionUris,
   ChunkDistributionNetworkConfig,
   CongestionInfoView,
+  TrieSplit,
   ShardId,
   ChunkHeaderView,
   DurationAsStdSchemaProvider,
@@ -2207,6 +2240,7 @@ export const schemas: Record<string, z.ZodTypeAny> = {
   CurrentEpochValidatorInfo,
   DataReceiptCreationConfigView,
   DataReceiverView,
+  DepositCostFailureReason,
   PeerInfoView,
   KnownProducerView,
   NetworkInfoView,
@@ -2235,6 +2269,7 @@ export const schemas: Record<string, z.ZodTypeAny> = {
   ReceiptView,
   FinalExecutionOutcomeWithReceiptView,
   GCConfig,
+  GasKeyNoncesView,
   ShardLayoutV0,
   ShardLayoutV1,
   ShardLayoutV2,

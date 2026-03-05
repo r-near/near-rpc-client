@@ -421,6 +421,14 @@ TODO(#8598): This error is named very poorly. A better name would be
         public_key: PublicKey,
         required: NearToken,
     },
+    ///Gas key balance is too high to burn during deletion
+    GasKeyBalanceTooHigh {
+        account_id: AccountId,
+        balance: NearToken,
+        ///Set for DeleteKey (specific key), None for DeleteAccount (aggregate)
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        public_key: ::std::option::Option<PublicKey>,
+    },
 }
 impl ::std::convert::From<FunctionCallError> for ActionErrorKind {
     fn from(value: FunctionCallError) -> Self {
@@ -845,6 +853,12 @@ pub struct ChunkHeaderView {
     pub outgoing_receipts_root: CryptoHash,
     pub prev_block_hash: CryptoHash,
     pub prev_state_root: CryptoHash,
+    /**Proposed trie split for dynamic resharding
+`None`: field missing (`ShardChunkHeaderInnerV4` or earlier)
+`Some(None)`: field present, but not set (`ChunkHeaderInnerV5` or later)
+`Some(Some(split))`: field present and set*/
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub proposed_split: ::std::option::Option<TrieSplit>,
     ///TODO(2271): deprecated.
     #[serde(default = "defaults::chunk_header_view_rent_paid")]
     pub rent_paid: NearToken,
@@ -1151,6 +1165,69 @@ pub struct DeployGlobalContractAction {
     pub code: ::std::string::String,
     pub deploy_mode: GlobalContractDeployMode,
 }
+/**Reason why a gas key transaction failed at the deposit/account level.
+In these cases, gas is still charged from the gas key.*/
+///
+#[derive(
+    ::serde::Deserialize,
+    ::serde::Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd
+)]
+pub enum DepositCostFailureReason {
+    NotEnoughBalance,
+    LackBalanceForState,
+}
+impl ::std::fmt::Display for DepositCostFailureReason {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Self::NotEnoughBalance => f.write_str("NotEnoughBalance"),
+            Self::LackBalanceForState => f.write_str("LackBalanceForState"),
+        }
+    }
+}
+impl ::std::str::FromStr for DepositCostFailureReason {
+    type Err = self::error::ConversionError;
+    fn from_str(
+        value: &str,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        match value {
+            "NotEnoughBalance" => Ok(Self::NotEnoughBalance),
+            "LackBalanceForState" => Ok(Self::LackBalanceForState),
+            _ => Err("invalid value".into()),
+        }
+    }
+}
+impl ::std::convert::TryFrom<&str> for DepositCostFailureReason {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: &str,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<&::std::string::String> for DepositCostFailureReason {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: &::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
+impl ::std::convert::TryFrom<::std::string::String> for DepositCostFailureReason {
+    type Error = self::error::ConversionError;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::std::result::Result<Self, self::error::ConversionError> {
+        value.parse()
+    }
+}
 ///`DetailedDebugStatus`
 ///
 #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug)]
@@ -1325,11 +1402,11 @@ impl ::std::fmt::Display for EpochId {
 ///
 #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug)]
 pub struct EpochSyncConfig {
-    /**This serves as two purposes: (1) the node will not epoch sync and instead resort to
-header sync, if the genesis block is within this many blocks from the current block;
-(2) the node will reject an epoch sync proof if the provided proof is for an epoch
-that is more than this many blocks behind the current block.*/
-    pub epoch_sync_horizon: u64,
+    /**Number of epochs behind the network head beyond which the node will use
+epoch sync instead of header sync. At the consumption site, this is
+multiplied by epoch_length to get the horizon in blocks.*/
+    #[serde(default = "defaults::default_u64::<u64, 2>")]
+    pub epoch_sync_horizon_num_epochs: u64,
     /**Timeout for epoch sync requests. The node will continue retrying indefinitely even
 if this timeout is exceeded.*/
     pub timeout_for_epoch_sync: DurationAsStdSchemaProvider,
@@ -1864,6 +1941,12 @@ pub struct GasKeyInfo {
     pub balance: NearToken,
     pub num_nonces: u16,
 }
+///Gas key nonces view returned by the `view_gas_key_nonces` RPC query.
+///
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug)]
+pub struct GasKeyNoncesView {
+    pub nonces: ::std::vec::Vec<u64>,
+}
 ///Configuration for garbage collection.
 ///
 #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug)]
@@ -2300,6 +2383,14 @@ must have a nonce_index in valid range, regular transactions must not.*/
     },
     ///Gas key does not have enough balance to cover gas costs.
     NotEnoughGasKeyBalance { balance: NearToken, cost: NearToken, signer_id: AccountId },
+    /**Gas key transaction failed because the account could not cover the deposit cost.
+Gas is still charged from the gas key in this case.*/
+    NotEnoughBalanceForDeposit {
+        balance: NearToken,
+        cost: NearToken,
+        reason: DepositCostFailureReason,
+        signer_id: AccountId,
+    },
 }
 impl ::std::convert::From<InvalidAccessKeyError> for InvalidTxError {
     fn from(value: InvalidAccessKeyError) -> Self {
@@ -3214,6 +3305,8 @@ pub enum ReceiptEnumView {
         already_delivered_shards: ::std::vec::Vec<ShardId>,
         code: ::std::string::String,
         id: GlobalContractIdentifier,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        nonce: ::std::option::Option<u64>,
         target_shard: ShardId,
     },
 }
@@ -4057,29 +4150,12 @@ pub enum RpcQueryResponse {
         block_height: u64,
         keys: ::std::vec::Vec<AccessKeyInfoView>,
     },
-    BlockHeightBlockHash(RpcQueryResponseBlockHeightBlockHash),
+    GasKeyNoncesView {
+        block_hash: CryptoHash,
+        block_height: u64,
+        nonces: ::std::vec::Vec<u64>,
+    },
 }
-impl ::std::convert::From<RpcQueryResponseBlockHeightBlockHash> for RpcQueryResponse {
-    fn from(value: RpcQueryResponseBlockHeightBlockHash) -> Self {
-        Self::BlockHeightBlockHash(value)
-    }
-}
-///`RpcQueryResponseBlockHeightBlockHash`
-///
-#[derive(
-    ::serde::Deserialize,
-    ::serde::Serialize,
-    Clone,
-    Copy,
-    Debug,
-    Eq,
-    Hash,
-    Ord,
-    PartialEq,
-    PartialOrd
-)]
-#[serde(deny_unknown_fields)]
-pub enum RpcQueryResponseBlockHeightBlockHash {}
 ///`RpcReceiptRequest`
 ///
 #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug)]
@@ -5346,6 +5422,21 @@ pub struct TransferToGasKeyAction {
     ///The public key of the gas key to fund
     pub public_key: PublicKey,
 }
+/**The result of splitting a memtrie into two possibly even parts, according to `memory_usage`
+stored in the trie nodes.
+
+**NOTE: This is an artificial value calculated according to `TRIE_COST`. Hence, it does not
+represent actual memory allocation, but the split ratio should be roughly consistent with that.***/
+///
+#[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug)]
+pub struct TrieSplit {
+    ///Account ID representing the split path
+    pub boundary_account: AccountId,
+    ///Total `memory_usage` of the left part (excluding the split path)
+    pub left_memory: u64,
+    ///Total `memory_usage` of the right part (including the split path)
+    pub right_memory: u64,
+}
 ///Error returned in the ExecutionOutcome in case of failure
 ///
 #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug)]
@@ -5564,10 +5655,14 @@ pub struct VmConfigView {
     pub discard_custom_sections: bool,
     ///See [VMConfig::eth_implicit_accounts](crate::vm::Config::eth_implicit_accounts).
     pub eth_implicit_accounts: bool,
+    ///See [VMConfig::eth_implicit_global_contract](crate::vm::Config::eth_implicit_global_contract).
+    pub eth_implicit_global_contract: bool,
     ///Costs for runtime externals
     pub ext_costs: ExtCostsConfigView,
     ///See [VMConfig::fix_contract_loading_cost](crate::vm::Config::fix_contract_loading_cost).
     pub fix_contract_loading_cost: bool,
+    ///See [VMConfig::gas_key_host_fns](crate::vm::Config::gas_key_host_fns).
+    pub gas_key_host_fns: bool,
     ///See [VMConfig::global_contract_host_fns](crate::vm::Config::global_contract_host_fns).
     pub global_contract_host_fns: bool,
     ///Gas cost of a growing memory by single page.
@@ -5759,7 +5854,10 @@ impl ::std::convert::TryFrom<::std::string::String> for WasmTrap {
         value.parse()
     }
 }
-///Withdraw NEAR from a gas key's balance to the account
+/**Withdraw NEAR from a gas key's balance to the account.
+
+This action must only be available via transactions, not via contract execution
+(there is no corresponding promise batch action host function).*/
 ///
 #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug)]
 pub struct WithdrawFromGasKeyAction {
